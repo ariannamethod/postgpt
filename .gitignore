@@ -1,1 +1,4 @@
 postgpt_bin
+__pycache__/
+postgpt_bin
+*.pyc
