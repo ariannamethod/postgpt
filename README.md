@@ -42,7 +42,7 @@ PostGPT is a dual-attention BPE transformer with the Dario field overlay. if you
                                │
                     ┌──────────▼──────────────┐
                     │    BPE Tokenizer        │
-                    │  512 merges → vocab 768 │
+                    │  1024 merges → vocab 1280 │
                     └──────────┬──────────────┘
                                │
               ┌────────────────▼────────────────┐
@@ -132,7 +132,7 @@ python postgpt.py "The transformer architecture"
 
 What happens:
 1. Reads `postgpt.txt` (150KB corpus about the technology itself)
-2. Learns BPE merges (512 merges → vocab 768) *(512 little weddings between bytes. not all of them happy. some of those merged pairs have never spoken since.)*
+2. Loads saved BPE merges from `.merges` file — or learns them from scratch on first run (1024 merges → vocab 1280) *(1024 little weddings between bytes. not all of them happy. some of those merged pairs have never spoken since.)*
 3. Builds metaweight probability space (bigram, trigram, hebbian, prophecy)
 4. **Seeds transformer weights from metaweights** — ghost becomes flesh *(this is the part where a model that was never trained acts like it was. don't make eye contact.)*
 5. **Continues your prompt** in two modes:
@@ -209,7 +209,7 @@ Layers:         2
 Heads:          4 (2 content + 2 RRPRAM)
 Embedding dim:  48
 Context length: 64
-Vocabulary:     768 (256 bytes + 512 BPE merges)
+Vocabulary:     1280 (256 bytes + 1024 BPE merges)
 Corpus:         150KB (postgpt.txt)
 Dependencies:   0 (runtime) / 1 (training: PyTorch)
 ```
