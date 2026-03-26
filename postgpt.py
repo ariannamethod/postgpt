@@ -924,10 +924,19 @@ def load_engine(corpus_path=None):
         raw_data = f.read()
     print(f"  Corpus: {len(raw_data)} bytes ({len(raw_data)/1024:.1f} KB)")
 
-    # Step 2: BPE tokenization
-    print("\n[2] Learning BPE merges...")
+    # Step 2: BPE tokenization — load saved merges if they exist
+    print("\n[2] BPE tokenizer...")
     tokenizer = BPETokenizer(max_merges=1024)
-    token_ids = tokenizer.learn(raw_data, num_merges=1024)
+    merges_path = corpus_path.replace('.txt', '.merges')
+    if os.path.exists(merges_path):
+        tokenizer.load(merges_path)
+        token_ids = tokenizer.encode(raw_data)
+        print(f"  Loaded {len(tokenizer.merges)} merges from {os.path.basename(merges_path)}. "
+              f"Encoding: {len(token_ids)} tokens")
+    else:
+        token_ids = tokenizer.learn(raw_data, num_merges=1024)
+        tokenizer.save(merges_path)
+        print(f"  Saved merges to {os.path.basename(merges_path)}")
 
     # Step 3: Build metaweights from tokenized corpus
     print("\n[3] Building metaweight probability space...")
