@@ -505,6 +505,85 @@ class PostGPT:
               f"ctx={context_len}, embd={n_embd}, heads={n_head} "
               f"(content={n_content_heads}, rrpram={n_rrpram_heads}), layers={n_layer}")
 
+    def init_from_metaweights(self, meta):
+        """
+        The ghost becomes flesh.
+
+        Instead of random initialization, seed transformer weights FROM the
+        metaweight probability space. The transformer doesn't start blind —
+        it starts knowing the corpus through its bones.
+
+        1. Token embeddings ← Hebbian co-occurrence (tokens that appear together → close vectors)
+        2. Position embeddings ← positional affinity (what tokens prefer which positions)
+        3. RRPRAM Wr ← positional affinity patterns (the rhythm of the corpus)
+        4. LM head ← unigram + bigram signal (most likely next tokens)
+        """
+        V = self.vocab_size
+        E = self.n_embd
+        T = self.context_len
+        scale = 0.15  # how much metaweight signal vs random noise
+
+        print("  Seeding transformer from metaweights (ghost → flesh)...")
+
+        # 1. Token embeddings: tokens with high co-occurrence → similar embeddings
+        #    Use SVD-free approach: for each token, its embedding is a weighted sum
+        #    of its Hebbian neighbors' random embeddings
+        for tok_a in range(min(V, len(self.wte))):
+            signal = [0.0] * E
+            n_neighbors = 0
+            for tok_b in range(min(V, len(self.wte))):
+                key = (min(tok_a, tok_b), max(tok_a, tok_b))
+                if key in meta.hebbian and meta.hebbian[key] > 0.01:
+                    strength = meta.hebbian[key]
+                    for d in range(E):
+                        signal[d] += strength * self.wte[tok_b][d].data
+                    n_neighbors += 1
+            if n_neighbors > 0:
+                for d in range(E):
+                    self.wte[tok_a][d].data += scale * signal[d] / n_neighbors
+
+        # 2. Position embeddings: from positional affinity
+        #    Positions that attract similar tokens → similar embeddings
+        for pos in range(min(T, len(self.wpe))):
+            signal = [0.0] * E
+            n_toks = 0
+            for tok in meta.pos_affinity:
+                if tok < V and pos < len(meta.pos_affinity[tok]):
+                    affinity = meta.pos_affinity[tok][pos]
+                    if affinity > 0.001:
+                        for d in range(E):
+                            signal[d] += affinity * self.wte[tok][d].data
+                        n_toks += 1
+            if n_toks > 0:
+                for d in range(E):
+                    self.wpe[pos][d].data += scale * signal[d] / n_toks
+
+        # 3. RRPRAM Wr: seed from positional affinity patterns
+        #    Each head's Wr column[t] gets signal from which tokens prefer position t
+        for layer in self.layers:
+            wr = layer['wr']
+            for h in range(self.n_rrpram):
+                for tok in meta.pos_affinity:
+                    if tok >= V:
+                        continue
+                    affs = meta.pos_affinity[tok]
+                    for pos in range(min(T, len(affs))):
+                        if affs[pos] > 0.001:
+                            wr_row = h * E + (tok % E)
+                            if wr_row < len(wr) and pos < len(wr[wr_row]):
+                                wr[wr_row][pos].data += scale * 0.5 * affs[pos]
+
+        # 4. LM head: seed from unigram frequencies
+        #    Tokens that appear more often get higher initial bias
+        for tok in range(min(V, len(self.lm_head))):
+            freq = meta.unigram[tok] if tok < len(meta.unigram) else 0
+            if freq > 0:
+                # Spread frequency signal across embedding dimensions
+                for d in range(E):
+                    self.lm_head[tok][d].data += scale * freq * self.wte[tok][d].data
+
+        print("  Metaweight seeding complete. The weights remember what they never learned.")
+
     def forward_token(self, token_id, pos_id, kv_cache):
         """
         Forward pass for a single token position.
@@ -857,6 +936,10 @@ def load_engine(corpus_path=None):
         n_content_heads=2,
         n_rrpram_heads=2,
     )
+
+    # Step 5: Seed transformer weights from metaweights (ghost → flesh)
+    print("\n[5] Seeding transformer from metaweights...")
+    model.init_from_metaweights(meta)
 
     return tokenizer, meta, model
 

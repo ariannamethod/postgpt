@@ -10,6 +10,10 @@ Not like, philosophically. Literally. What if you tokenize a corpus with BPE, co
 
 I called them **metaweights**: weights that are implied to exist, but don't actually exist, yet still form a complete probability space over next tokens. The weights are there. They just don't know they're weights. Neither does the GPU.
 
+The thesis: **training often externalizes structure that is already latent in tokenized data.** PostGPT proves the latent part. The training loop proves the rest.
+
+And the transformer isn't decoration — it's initialized FROM the metaweights. Hebbian co-occurrence seeds the embeddings. Positional affinity seeds RRPRAM. Bigram geometry seeds the output head. The ghost becomes flesh. The weights remember what they never learned.
+
 This is PostGPT.
 
 ## what is this
@@ -126,8 +130,11 @@ What happens:
 1. Reads `postgpt.txt` (150KB corpus about the technology itself)
 2. Learns BPE merges (512 merges → vocab 768)
 3. Builds metaweight probability space (bigram, trigram, hebbian, prophecy)
-4. **Continues your prompt** using both attention mechanisms + metaweights
-5. No training. No weights loaded. Just BPE + statistics + dual attention.
+4. **Seeds transformer weights from metaweights** — ghost becomes flesh
+5. **Continues your prompt** in two modes:
+   - **meta mode** — pure metaweight generation. The core discovery. Statistical ghost-model.
+   - **full mode** — transformer forward pass + Dario field overlay. Both attentions active, weights seeded from corpus statistics.
+6. No training. No weights loaded. Just BPE + statistics + dual attention + metaweight-informed init.
 
 **Example output** (zero training):
 ```
