@@ -8,6 +8,7 @@
  * Compile: gcc -O2 -o postgpt postgpt.c -lm
  * Run:     ./postgpt
  *
+ * the tokenizer IS the training. everything after this is just theater.
  * resonance is unbreakable.
  */
 
@@ -329,6 +330,45 @@ static void weights_init(int vocab_size) {
     init_matrix(&W.lm_head[0][0], vocab_size, N_EMBD, std);
 }
 
+/*
+ * ghost becomes flesh: seed transformer weights from metaweight statistics.
+ * the weights remember what they never learned.
+ */
+static void weights_seed_from_meta(int vocab_size) {
+    float scale = 0.15f;
+
+    /* 1. Token embeddings: tokens with high bigram co-occurrence → similar vectors */
+    for (int a = 0; a < vocab_size && a < MAX_VOCAB; a++) {
+        float signal[N_EMBD] = {0};
+        int neighbors = 0;
+        for (int i = 0; i < meta_n_bigrams; i++) {
+            if (meta_bigrams[i].a == a && meta_bigrams[i].prob > 0.01f) {
+                int b = meta_bigrams[i].b;
+                if (b < vocab_size && b < MAX_VOCAB) {
+                    float strength = meta_bigrams[i].prob;
+                    for (int d = 0; d < N_EMBD; d++)
+                        signal[d] += strength * W.wte[b][d];
+                    neighbors++;
+                }
+            }
+        }
+        if (neighbors > 0) {
+            for (int d = 0; d < N_EMBD; d++)
+                W.wte[a][d] += scale * signal[d] / neighbors;
+        }
+    }
+
+    /* 2. LM head: seed from unigram frequencies */
+    for (int tok = 0; tok < vocab_size && tok < MAX_VOCAB; tok++) {
+        if (meta_unigram[tok] > 0) {
+            for (int d = 0; d < N_EMBD; d++)
+                W.lm_head[tok][d] += scale * meta_unigram[tok] * W.wte[tok][d];
+        }
+    }
+
+    printf("  weights seeded from metaweights (ghost -> flesh)\n");
+}
+
 /* ───────────────────────── Forward Pass ───────────────────────── */
 
 static void rmsnorm(float *out, const float *x, int n) {
@@ -591,6 +631,10 @@ int main(int argc, char **argv) {
     weights_init(bpe_vocab_size);
     printf("  Initialized: vocab=%d, ctx=%d, embd=%d, heads=%d (content=%d, rrpram=%d), layers=%d\n",
            bpe_vocab_size, CONTEXT_LEN, N_EMBD, N_HEAD, N_CONTENT, N_RRPRAM, N_LAYER);
+
+    /* Seed weights from metaweights — ghost becomes flesh */
+    printf("\n[5] Seeding weights from metaweights...\n");
+    weights_seed_from_meta(bpe_vocab_size);
 
     /* Proof of concept: phrase continuation */
     char output[4096];
