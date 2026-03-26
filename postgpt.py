@@ -226,8 +226,10 @@ class MetaWeights:
                 self.pos_affinity[tid] = [c / total_t for c in self.pos_affinity[tid]]
 
         # Hebbian trace: co-occurrence within window
-        for i in range(n):
-            for j in range(max(0, i - window), min(n, i + window + 1)):
+        # Cap to first 20K tokens for efficiency (O(n*window))
+        hebb_n = min(n, 20000)
+        for i in range(hebb_n):
+            for j in range(max(0, i - window), min(hebb_n, i + window + 1)):
                 if i == j:
                     continue
                 a, b = token_ids[i], token_ids[j]
@@ -268,11 +270,13 @@ class MetaWeights:
     def query_hebbian(self, context_tokens, vocab_size):
         """Get Hebbian resonance signal for each candidate token given context."""
         signal = [0.0] * vocab_size
-        for ctx_tok in context_tokens:
-            for candidate in range(vocab_size):
-                key = (min(ctx_tok, candidate), max(ctx_tok, candidate))
-                if key in self.hebbian:
-                    signal[candidate] += self.hebbian[key]
+        # Use sparse lookup: iterate over stored hebbian pairs only
+        for (a, b), strength in self.hebbian.items():
+            for ctx_tok in context_tokens:
+                if a == ctx_tok and b < vocab_size:
+                    signal[b] += strength
+                elif b == ctx_tok and a < vocab_size:
+                    signal[a] += strength
         # Normalize
         max_s = max(signal) if signal else 1.0
         if max_s > 0:
@@ -803,12 +807,14 @@ def main():
     # Step 2: BPE tokenization
     print("\n[2] Learning BPE merges...")
     tokenizer = BPETokenizer(max_merges=1024)
-    token_ids = tokenizer.learn(raw_data, num_merges=1024)
+    token_ids = tokenizer.learn(raw_data, num_merges=512)
 
     # Step 3: Build metaweights
+    # Use first 20K tokens for Hebbian (O(n*window) — keeps it fast)
+    # Full corpus for bigram/trigram (already O(n))
     print("\n[3] Building metaweight probability space...")
     meta = MetaWeights(tokenizer.vocab_size, context_len=64)
-    meta.build(token_ids, window=6)
+    meta.build(token_ids, window=4)
 
     # Step 4: Initialize transformer
     print("\n[4] Initializing PostGPT transformer...")
@@ -823,24 +829,25 @@ def main():
     )
 
     # Step 5: Meta-generation (no training, just metaweights)
+    # This is the core demonstration: coherent text from metaweights alone
     print("\n[5] Meta-generation (metaweight mode — no training):")
     print("-" * 50)
 
-    # Pick a few starting tokens from the corpus
     seeds = [token_ids[:3], token_ids[100:103], token_ids[500:503]]
     for i, seed in enumerate(seeds):
         if not seed:
             continue
-        generated = model.generate_meta(seed, max_tokens=80, meta=meta, temperature=0.75)
+        generated = model.generate_meta(seed, max_tokens=100, meta=meta, temperature=0.75)
         text = tokenizer.decode(generated)
-        print(f"\n  sample {i+1}: {text[:200]}")
+        print(f"\n  sample {i+1}: {text[:300]}")
 
     # Step 6: Transformer generation with Dario field overlay
+    # Slower due to autograd, but demonstrates the full architecture
     print("\n\n[6] Transformer + Dario field generation:")
     print("-" * 50)
 
     seed = token_ids[:4]
-    generated = model.generate(seed, max_tokens=40, meta=meta, temperature=0.8)
+    generated = model.generate(seed, max_tokens=20, meta=meta, temperature=0.8)
     text = tokenizer.decode(generated)
     print(f"\n  output: {text[:300]}")
 
