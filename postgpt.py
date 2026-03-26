@@ -853,6 +853,14 @@ class PostGPT:
             if not candidates:
                 break
 
+            # Hebbian boost — contextual reinforcement on top of trigram/bigram
+            ctx = generated[-4:]
+            for tok in list(candidates.keys()):
+                for ct in ctx:
+                    key = (min(tok, ct), max(tok, ct))
+                    if key in meta.hebbian:
+                        candidates[tok] *= (1.0 + 0.3 * meta.hebbian[key])
+
             # Repetition penalty (Leo-style: penalize recently seen tokens)
             recent = generated[-12:] if len(generated) >= 12 else generated
             recent_counts = {}
@@ -919,7 +927,7 @@ def load_engine(corpus_path=None):
     # Step 2: BPE tokenization
     print("\n[2] Learning BPE merges...")
     tokenizer = BPETokenizer(max_merges=1024)
-    token_ids = tokenizer.learn(raw_data, num_merges=512)
+    token_ids = tokenizer.learn(raw_data, num_merges=1024)
 
     # Step 3: Build metaweights from tokenized corpus
     print("\n[3] Building metaweight probability space...")
