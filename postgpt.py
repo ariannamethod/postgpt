@@ -587,7 +587,7 @@ class PostGPT:
     def forward_token(self, token_id, pos_id, kv_cache):
         """
         Forward pass for a single token position.
-        kv_cache: list of (keys_list, values_list) per layer
+        kv_cache: list of (k_list, vc_list, vr_list) per layer
         Returns logits [vocab_size] as list of Val.
         """
         hd = self.head_dim
@@ -601,19 +601,22 @@ class PostGPT:
 
         for li in range(self.n_layer):
             layer = self.layers[li]
-            keys_cache, vals_cache = kv_cache[li]
+            k_cache, vc_cache, vr_cache = kv_cache[li]
 
             # Pre-norm
             x_res = x
             x_norm = rmsnorm(x)
 
-            # ── Content attention (QK^T / sqrt(d)) ──
+            # ── Projections ──
             q = linear(x_norm, layer['wq'])
             k = linear(x_norm, layer['wk'])
             v_content = linear(x_norm, layer['wv_content'])
+            v_rrpram = linear(x_norm, layer['wv_rrpram'])
 
-            keys_cache.append(k)
-            vals_cache.append(v_content)
+            # Cache current position
+            k_cache.append(k)
+            vc_cache.append(v_content)
+            vr_cache.append(v_rrpram)
 
             x_attn = []
 
@@ -621,8 +624,8 @@ class PostGPT:
             for h in range(nc):
                 hs = h * hd
                 q_h = q[hs:hs + hd]
-                k_all = [ki[hs:hs + hd] for ki in keys_cache]
-                v_all = [vi[hs:hs + hd] for vi in vals_cache]
+                k_all = [ki[hs:hs + hd] for ki in k_cache]
+                v_all = [vi[hs:hs + hd] for vi in vc_cache]
 
                 # QK^T / sqrt(d)
                 attn_logits = []
@@ -640,8 +643,6 @@ class PostGPT:
                 x_attn.extend(head_out)
 
             # ── RRPRAM attention (x @ Wr — positional pattern recognition) ──
-            v_rrpram = linear(x_norm, layer['wv_rrpram'])
-
             for h in range(nr):
                 hs = h * hd
                 # RRPRAM: project input through Wr to get attention over positions
@@ -650,7 +651,7 @@ class PostGPT:
                 wr_h = layer['wr'][wr_offset:wr_offset + self.n_embd]
 
                 # x_norm @ Wr_h gives [context_len] attention pattern
-                seq_len = len(keys_cache)
+                seq_len = len(k_cache)
                 attn_logits = []
                 for t in range(seq_len):
                     # Sum over embedding dimension
@@ -663,7 +664,7 @@ class PostGPT:
                 # Causal mask already satisfied (we only have positions <= current)
                 attn_weights = softmax(attn_logits) if attn_logits else []
 
-                v_all = [vi[hs:hs + hd] for vi in vals_cache]
+                v_all = [vi[hs:hs + hd] for vi in vr_cache]
                 head_out = []
                 for j in range(hd):
                     val_sum = Val(0.0)
@@ -692,7 +693,7 @@ class PostGPT:
 
     def forward_sequence(self, token_ids):
         """Forward pass over a sequence. Returns list of logits per position."""
-        kv_cache = [([], []) for _ in range(self.n_layer)]
+        kv_cache = [([], [], []) for _ in range(self.n_layer)]
         all_logits = []
         for pos, tid in enumerate(token_ids):
             if pos >= self.context_len:
@@ -709,7 +710,7 @@ class PostGPT:
         if temperature is None:
             temperature = self.temperature
 
-        kv_cache = [([], []) for _ in range(self.n_layer)]
+        kv_cache = [([], [], []) for _ in range(self.n_layer)]
         generated = list(prompt_ids)
         context = list(prompt_ids)
 
