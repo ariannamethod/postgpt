@@ -34,33 +34,33 @@ PostGPT is a dual-attention BPE transformer with the Dario field overlay.
 
 ```
                     ┌─────────────────────────┐
-                    │      postgpt.txt         │
-                    │   (150KB unique corpus)   │
+                    │      postgpt.txt        │
+                    │   (150KB unique corpus  │
                     └──────────┬──────────────┘
                                │
                     ┌──────────▼──────────────┐
-                    │    BPE Tokenizer         │
-                    │  512 merges → vocab 768  │
+                    │    BPE Tokenizer        │
+                    │  512 merges → vocab 768 │
                     └──────────┬──────────────┘
                                │
               ┌────────────────▼────────────────┐
-              │         METAWEIGHTS              │
-              │  unigram · bigram · trigram      │
-              │  hebbian trace · prophecy field  │
-              │  positional affinity             │
-              │                                  │
-              │  "weights that don't exist       │
-              │   but form a probability space"  │
+              │         METAWEIGHTS             │
+              │  unigram · bigram · trigram     │
+              │  hebbian trace · prophecy field │
+              │  positional affinity            │
+              │                                 │
+              │  "weights that don't exist      │
+              │   but form a probability space" │
               └────────────────┬────────────────┘
                                │
               ┌────────────────▼────────────────┐
-              │     DUAL-ATTENTION TRANSFORMER   │
-              │                                  │
+              │     DUAL-ATTENTION TRANSFORMER  │
+              │                                 │
               │  ┌──────────┐  ┌──────────────┐ │
               │  │ Content  │  │   RRPRAM     │ │
-              │  │  QK^T/√d │  │   x @ Wr    │ │
+              │  │  QK^T/√d │  │   x @ Wr     │ │
               │  │ semantic │  │  positional  │ │
-              │  │ similarity│  │  patterns   │ │
+              │  │ similarity│ │  patterns    │ │
               │  └──────────┘  └──────────────┘ │
               │         ↓            ↓          │
               │      concat → Wo → residual     │
@@ -69,20 +69,20 @@ PostGPT is a dual-attention BPE transformer with the Dario field overlay.
               └────────────────┬────────────────┘
                                │
               ┌────────────────▼────────────────┐
-              │         DARIO FIELD              │
-              │                                  │
-              │  p(x|Φ) = softmax(               │
+              │         DARIO FIELD             │
+              │                                 │
+              │  p(x|Φ) = softmax(              │
               │    B + α·H + β·F + γ·A + T      │
-              │    ──────────────────────        │
-              │              τ                   │
-              │  )                               │
-              │                                  │
-              │  B = base logits                 │
-              │  H = hebbian trace               │
-              │  F = prophecy field              │
-              │  A = destiny vector              │
-              │  T = trauma                      │
-              │  τ = temperature                 │
+              │    ──────────────────────       │
+              │              τ                  │
+              │  )                              │
+              │                                 │
+              │  B = base logits                │
+              │  H = hebbian trace              │
+              │  F = prophecy field             │
+              │  A = destiny vector             │
+              │  T = trauma                     │
+              │  τ = temperature                │
               └─────────────────────────────────┘
 ```
 
