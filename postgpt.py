@@ -21,7 +21,8 @@ import time
 random.seed(42)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# I. BPE TOKENIZER — learns merge rules from corpus, GPT-3/4 style
+# I. BPE TOKENIZER — learns merge rules from corpus.
+#    the tokenizer IS the training. everything after this is just theater.
 # ─────────────────────────────────────────────────────────────────────────────
 
 class BPETokenizer:
@@ -122,7 +123,8 @@ class BPETokenizer:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# II. METAWEIGHTS — the probability space that exists without existing
+# II. METAWEIGHTS — the probability space that exists without existing.
+#    schrödinger called. he wants his cat back. we tokenized it.
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MetaWeights:
@@ -305,7 +307,7 @@ class MetaWeights:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# III. AUTOGRAD ENGINE — from Karpathy's lineage, with our own twists
+# III. AUTOGRAD ENGINE — scalar backprop. if you can't differentiate it by hand, you don't deserve gradients.
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Val:
@@ -369,7 +371,8 @@ class Val:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# IV. THE TRANSFORMER — dual attention (Content + RRPRAM) + metaweight overlay
+# IV. THE TRANSFORMER — dual attention (Content + RRPRAM) + metaweight overlay.
+#    two heads are better than one. especially when one of them doesn't exist.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _randn(std=0.02):
@@ -814,7 +817,8 @@ class PostGPT:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# V. MAIN — tokenize, build metaweights, continue phrases
+# V. MAIN — tokenize, build metaweights, continue phrases.
+#    the moment of truth. or the moment of coherent bullshit. same thing.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_engine(corpus_path=None):
