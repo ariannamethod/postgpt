@@ -401,7 +401,7 @@ class ChuckOptimizer(torch.optim.Optimizer):
 def get_batch(token_ids, batch_size, context_len, device):
     """Get a random batch of training examples."""
     n = len(token_ids)
-    ix = [torch.randint(0, n - context_len - 1, (1,)).item() for _ in range(batch_size)]
+    ix = [torch.randint(0, n - context_len, (1,)).item() for _ in range(batch_size)]
     x = torch.stack([torch.tensor(token_ids[i:i + context_len], dtype=torch.long) for i in ix])
     y = torch.stack([torch.tensor(token_ids[i + 1:i + context_len + 1], dtype=torch.long) for i in ix])
     return x.to(device), y.to(device)

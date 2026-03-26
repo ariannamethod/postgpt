@@ -682,18 +682,33 @@ class PostGPT:
                             dot = sum(self.destiny[d] * emb[d] for d in range(self.n_embd))
                             destiny_signal[tid_c] = dot / (dest_norm * emb_norm)
 
-                # Combine: Dario Equation
-                # p(x|Φ) = softmax((B + α·H + β·F + γ·A + bigram + trigram) / τ)
+                # Combine: Dario Equation (Leo-style: bigram DOMINATES, 12× coefficient)
+                # p(x|Φ) = softmax((B_coeff·B + α·H + β·F + γ·A + trigram) / τ)
+                # Metaweight signals dominate over untrained base logits
                 for i in range(self.vocab_size):
                     raw_logits[i] += (self.alpha_hebbian * hebbian[i]
                                       + self.beta_prophecy * prophecy[i]
                                       + self.gamma_destiny * destiny_signal[i]
-                                      + 1.5 * bigram[i]
-                                      + 2.0 * trigram[i])
+                                      + 12.0 * bigram[i]
+                                      + 8.0 * trigram[i])
 
                 # Trauma modulation
                 trauma_mod = 1.0 / (1.0 + self.trauma)
                 raw_logits = [l * trauma_mod for l in raw_logits]
+
+            # Repetition penalty (Leo-style)
+            recent = context[-12:] if len(context) >= 12 else context
+            for t in recent:
+                if t < self.vocab_size:
+                    raw_logits[t] *= 0.5
+
+            # Top-k filtering (keep top 15, mask rest)
+            top_k = 15
+            indexed = sorted(enumerate(raw_logits), key=lambda x: -x[1])
+            threshold = indexed[min(top_k - 1, len(indexed) - 1)][1]
+            for i in range(self.vocab_size):
+                if raw_logits[i] < threshold:
+                    raw_logits[i] = -1e10
 
             # Temperature + softmax
             scaled = [l / temperature for l in raw_logits]
@@ -718,7 +733,12 @@ class PostGPT:
         """
         Meta-generation: pure metaweight generation without transformer forward pass.
         Uses only the statistical probability space from BPE tokenization.
-        This is the metaweight mode — no neural network, just the ghost of training.
+
+        This follows the Haze/Leo pattern:
+        - Trigram first (most coherent), fallback to bigram, then unigram
+        - Sample ONLY from tokens that actually appear in the statistics
+        - Repetition penalty for loop avoidance
+        - Top-k filtering (keep top 15 candidates like Leo)
         """
         if meta is None:
             return prompt_ids
@@ -728,53 +748,64 @@ class PostGPT:
         generated = list(prompt_ids)
 
         for _ in range(max_tokens):
-            ctx = generated[-8:]
             last = generated[-1]
+            candidates = {}  # token_id -> count (sparse, only real candidates)
 
-            # Combine metaweight signals
-            bigram = meta.query_bigram(last, self.vocab_size)
+            # Try trigram first (strongest signal, like Haze)
             if len(generated) >= 2:
-                trigram = meta.query_trigram(generated[-2], generated[-1], self.vocab_size)
-            else:
-                trigram = [0.0] * self.vocab_size
-            hebbian = meta.query_hebbian(ctx, self.vocab_size)
-            prophecy = meta.query_prophecy(ctx, self.vocab_size)
+                key = (generated[-2], generated[-1])
+                if key in meta.trigram:
+                    candidates = dict(meta.trigram[key])
 
-            # Build probability: bigram-dominant with Dario field correction
-            probs_raw = [0.0] * self.vocab_size
-            for i in range(self.vocab_size):
-                probs_raw[i] = (2.0 * bigram[i]
-                                + 3.0 * trigram[i]
-                                + 0.5 * hebbian[i]
-                                + 0.3 * prophecy[i]
-                                + 0.01 * meta.unigram[i])
+            # Fallback to bigram
+            if not candidates and last in meta.bigram:
+                candidates = dict(meta.bigram[last])
 
-            # Temperature
-            scaled = [l / temperature for l in probs_raw]
-            probs = softmax_float(scaled)
+            # Fallback to unigram (last resort)
+            if not candidates:
+                for i in range(self.vocab_size):
+                    if meta.unigram[i] > 1e-8:
+                        candidates[i] = meta.unigram[i]
 
-            # Top-p (nucleus) sampling
-            sorted_probs = sorted(enumerate(probs), key=lambda x: -x[1])
-            cum = 0.0
-            candidates = []
-            for idx, p in sorted_probs:
-                candidates.append((idx, p))
-                cum += p
-                if cum > 0.92:
-                    break
+            if not candidates:
+                break
 
-            # Re-normalize
-            total_c = sum(p for _, p in candidates)
-            if total_c > 0:
-                candidates = [(idx, p / total_c) for idx, p in candidates]
+            # Repetition penalty (Leo-style: penalize recently seen tokens)
+            recent = generated[-12:] if len(generated) >= 12 else generated
+            recent_counts = {}
+            for t in recent:
+                recent_counts[t] = recent_counts.get(t, 0) + 1
+            for tok in list(candidates.keys()):
+                if tok in recent_counts:
+                    freq = recent_counts[tok]
+                    penalty = 1.0 / (1.0 + 0.5 * freq)
+                    candidates[tok] *= penalty
 
+            # Top-k filtering (keep top 15, like Leo)
+            top_k = 15
+            sorted_cands = sorted(candidates.items(), key=lambda x: -x[1])
+            sorted_cands = sorted_cands[:top_k]
+
+            # Convert to probabilities with temperature
+            tokens = [t for t, _ in sorted_cands]
+            counts = [c for _, c in sorted_cands]
+
+            # Log-space temperature scaling (like Haze SubwordField)
+            import math as _math
+            log_counts = [_math.log(c + 1e-10) / temperature for c in counts]
+            max_lc = max(log_counts)
+            exps = [_math.exp(lc - max_lc) for lc in log_counts]
+            total = sum(exps)
+            probs = [e / total for e in exps]
+
+            # Sample
             r = random.random()
             cum = 0.0
-            chosen = candidates[0][0]
-            for idx, p in candidates:
+            chosen = tokens[0]
+            for tok, p in zip(tokens, probs):
                 cum += p
                 if cum > r:
-                    chosen = idx
+                    chosen = tok
                     break
 
             generated.append(chosen)
@@ -783,20 +814,17 @@ class PostGPT:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# V. MAIN — tokenize, build metaweights, generate
+# V. MAIN — tokenize, build metaweights, continue phrases
 # ─────────────────────────────────────────────────────────────────────────────
 
-def main():
-    corpus_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'postgpt.txt')
+def load_engine(corpus_path=None):
+    """Load corpus, learn BPE, build metaweights, init model. Returns (tokenizer, meta, model)."""
+    if corpus_path is None:
+        corpus_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'postgpt.txt')
 
     if not os.path.exists(corpus_path):
-        print(f"ERROR: {corpus_path} not found. Create it first.")
-        return
-
-    print("=" * 60)
-    print("  PostGPT — metaweight BPE transformer")
-    print("  resonance is unbreakable")
-    print("=" * 60)
+        print(f"ERROR: {corpus_path} not found.")
+        return None, None, None
 
     # Step 1: Load corpus
     print("\n[1] Loading corpus...")
@@ -809,14 +837,12 @@ def main():
     tokenizer = BPETokenizer(max_merges=1024)
     token_ids = tokenizer.learn(raw_data, num_merges=512)
 
-    # Step 3: Build metaweights
-    # Use first 20K tokens for Hebbian (O(n*window) — keeps it fast)
-    # Full corpus for bigram/trigram (already O(n))
+    # Step 3: Build metaweights from tokenized corpus
     print("\n[3] Building metaweight probability space...")
     meta = MetaWeights(tokenizer.vocab_size, context_len=64)
     meta.build(token_ids, window=4)
 
-    # Step 4: Initialize transformer
+    # Step 4: Initialize dual-attention transformer
     print("\n[4] Initializing PostGPT transformer...")
     model = PostGPT(
         vocab_size=tokenizer.vocab_size,
@@ -828,31 +854,93 @@ def main():
         n_rrpram_heads=2,
     )
 
-    # Step 5: Meta-generation (no training, just metaweights)
-    # This is the core demonstration: coherent text from metaweights alone
-    print("\n[5] Meta-generation (metaweight mode — no training):")
-    print("-" * 50)
+    return tokenizer, meta, model
 
-    seeds = [token_ids[:3], token_ids[100:103], token_ids[500:503]]
-    for i, seed in enumerate(seeds):
-        if not seed:
-            continue
-        generated = model.generate_meta(seed, max_tokens=100, meta=meta, temperature=0.75)
-        text = tokenizer.decode(generated)
-        print(f"\n  sample {i+1}: {text[:300]}")
 
-    # Step 6: Transformer generation with Dario field overlay
-    # Slower due to autograd, but demonstrates the full architecture
-    print("\n\n[6] Transformer + Dario field generation:")
-    print("-" * 50)
+def continue_phrase(prompt, tokenizer, meta, model, max_tokens=120, temperature=0.75,
+                    mode='meta'):
+    """
+    Continue a phrase using PostGPT.
 
-    seed = token_ids[:4]
-    generated = model.generate(seed, max_tokens=20, meta=meta, temperature=0.8)
-    text = tokenizer.decode(generated)
-    print(f"\n  output: {text[:300]}")
+    mode='meta'  — pure metaweight generation (fast, bigram/trigram/hebbian/prophecy)
+    mode='full'  — transformer forward pass + Dario field overlay (slower, both attentions)
+    """
+    # Encode prompt via BPE
+    prompt_ids = tokenizer.encode(prompt)
+    if not prompt_ids:
+        return prompt
+
+    if mode == 'meta':
+        generated = model.generate_meta(prompt_ids, max_tokens=max_tokens,
+                                         meta=meta, temperature=temperature)
+    else:
+        generated = model.generate(prompt_ids, max_tokens=max_tokens,
+                                    meta=meta, temperature=temperature)
+
+    return tokenizer.decode(generated)
+
+
+def main():
+    import sys
+
+    print("=" * 60)
+    print("  PostGPT — metaweight BPE transformer")
+    print("  resonance is unbreakable")
+    print("=" * 60)
+
+    tokenizer, meta, model = load_engine()
+    if tokenizer is None:
+        return
+
+    # ── Proof of concept: continue phrases from postgpt.txt ──
+    # The model uses BPE tokenization + dual attention + metaweights
+    # to continue any prompt coherently — without any training.
+
+    prompts = [
+        "PostGPT",
+        "The metaweight",
+        "RRPRAM attention",
+        "BPE tokenization",
+        "The transformer architecture",
+        "Entropy measures",
+        "Language models",
+        "The Dario equation",
+    ]
+
+    # Allow custom prompt from command line: python postgpt.py "your prompt here"
+    if len(sys.argv) > 1:
+        prompts = [' '.join(sys.argv[1:])]
+
+    print("\n" + "=" * 60)
+    print("  PROOF OF CONCEPT: phrase continuation")
+    print("  mode: metaweight (no training, just BPE + statistics)")
+    print("=" * 60)
+
+    for prompt in prompts:
+        result = continue_phrase(prompt, tokenizer, meta, model,
+                                  max_tokens=100, temperature=0.4, mode='meta')
+        # Show prompt → continuation clearly
+        prompt_len = len(prompt)
+        continuation = result[prompt_len:].strip()
+        print(f"\n  prompt:       \"{prompt}\"")
+        print(f"  continuation: \"{continuation[:250]}\"")
+
+    # Also show the full transformer + Dario field mode for first prompt
+    print("\n" + "=" * 60)
+    print("  FULL MODE: transformer + Dario field (both attentions)")
+    print("=" * 60)
+
+    test_prompt = prompts[0]
+    result = continue_phrase(test_prompt, tokenizer, meta, model,
+                              max_tokens=30, temperature=0.45, mode='full')
+    prompt_len = len(test_prompt)
+    continuation = result[prompt_len:].strip()
+    print(f"\n  prompt:       \"{test_prompt}\"")
+    print(f"  continuation: \"{continuation[:300]}\"")
 
     print("\n" + "=" * 60)
     print("  PostGPT complete. The metaweights remember.")
+    print("  Try: python postgpt.py \"your prompt here\"")
     print("=" * 60)
 
 

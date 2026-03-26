@@ -113,19 +113,38 @@ These metaweights form a probability space. The transformer navigates it. No tra
 python postgpt.py
 ```
 
+Or with a custom prompt:
+```bash
+python postgpt.py "The transformer architecture"
+```
+
 What happens:
-1. Reads `postgpt.txt`
+1. Reads `postgpt.txt` (150KB corpus about the technology itself)
 2. Learns BPE merges (512 merges → vocab 768)
-3. Builds metaweight probability space
-4. Generates text through metaweights alone (no training)
-5. Generates text through transformer + Dario field
-6. You stare at the output and wonder about free will
+3. Builds metaweight probability space (bigram, trigram, hebbian, prophecy)
+4. **Continues your prompt** using both attention mechanisms + metaweights
+5. No training. No weights loaded. Just BPE + statistics + dual attention.
+
+**Example output** (meta mode, zero training):
+```
+  "PostGPT"               → "normalized computation graph... Metaweights...
+                             training signals representations"
+  "The transformer architecture" → ", rrpram), embedding dimension 48, context
+                             length 32, vocabulary size 768. Head dimension is 12,
+                             giving approximately 73,92 parameters total. The RRPRAM
+                             pattern matrices contribute 4,096 parameters dedicated
+                             to positional pattern recognition across 3..."
+  "The Dario equation"    → ". In the PostGPT architecture... transformers...
+                             metaweights derived from BPE tokenization"
+```
 
 ### C version
 
 ```bash
 gcc -O2 -o postgpt postgpt.c -lm
 ./postgpt
+# or with custom prompt:
+./postgpt "your prompt here"
 ```
 
 Same algorithm. Faster. Angrier. No questions asked.
@@ -140,10 +159,10 @@ Uses the **Chuck Optimizer** — a self-aware AdamW that tracks loss trends, adj
 
 **Results** (100 steps, CPU):
 ```
-First 10 avg loss: 33.0
-Last 10 avg loss:  18.2
-Loss delta:        -14.8
-✓ Loss decreased by 44.8%
+First 10 avg loss: 33.3
+Last 10 avg loss:  16.3
+Loss delta:        -17.1
+✓ Loss decreased by 51.2%
 ```
 
 ## the numbers

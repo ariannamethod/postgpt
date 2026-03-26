@@ -554,7 +554,7 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
 
 /* ───────────────────────── Main ───────────────────────── */
 
-int main(void) {
+int main(int argc, char **argv) {
     printf("============================================================\n");
     printf("  PostGPT (C) — metaweight BPE transformer\n");
     printf("  resonance is unbreakable\n");
@@ -592,28 +592,75 @@ int main(void) {
     printf("  Initialized: vocab=%d, ctx=%d, embd=%d, heads=%d (content=%d, rrpram=%d), layers=%d\n",
            bpe_vocab_size, CONTEXT_LEN, N_EMBD, N_HEAD, N_CONTENT, N_RRPRAM, N_LAYER);
 
-    /* Meta-generation */
-    printf("\n[5] Meta-generation (metaweight mode):\n");
-    printf("--------------------------------------------------\n");
-
+    /* Proof of concept: phrase continuation */
     char output[4096];
-    int seeds[][3] = {{tokens[0], tokens[1], tokens[2]},
-                      {tokens[100], tokens[101], tokens[102]},
-                      {tokens[500], tokens[501], tokens[502]}};
+    int prompt_ids[1024];
 
-    for (int s = 0; s < 3; s++) {
-        generate_meta(seeds[s], 3, 80, bpe_vocab_size, 0.75f, output, sizeof(output));
-        printf("\n  sample %d: %.200s\n", s + 1, output);
+    /* Default prompts or command-line argument */
+    const char *prompts[] = {
+        "PostGPT",
+        "The metaweight",
+        "RRPRAM attention",
+        "BPE tokenization",
+        "The transformer",
+        "Language models",
+        NULL
+    };
+
+    /* If user provided a prompt, use only that */
+    const char *user_prompts[2] = {NULL, NULL};
+    if (argc > 1) {
+        user_prompts[0] = argv[1];
+        prompts[0] = user_prompts[0];
+        prompts[1] = NULL;
     }
 
-    /* Full generation with Dario field */
-    printf("\n\n[6] Transformer + Dario field generation:\n");
-    printf("--------------------------------------------------\n");
-    generate_full(tokens, 4, 40, bpe_vocab_size, 0.8f, output, sizeof(output));
-    printf("\n  output: %.300s\n", output);
+    printf("\n============================================================\n");
+    printf("  PROOF OF CONCEPT: phrase continuation\n");
+    printf("  mode: metaweight (no training, just BPE + statistics)\n");
+    printf("============================================================\n");
+
+    for (int p = 0; prompts[p] != NULL; p++) {
+        const char *prompt = prompts[p];
+        int prompt_len = bpe_encode((const unsigned char *)prompt,
+                                     (int)strlen(prompt), prompt_ids, 1024);
+
+        generate_meta(prompt_ids, prompt_len, 100, bpe_vocab_size, 0.72f,
+                      output, sizeof(output));
+
+        /* Show prompt and continuation separately */
+        int plen = (int)strlen(prompt);
+        printf("\n  prompt:       \"%s\"\n", prompt);
+        if ((int)strlen(output) > plen)
+            printf("  continuation: \"%.*s\"\n", 250, output + plen);
+        else
+            printf("  continuation: \"%s\"\n", output);
+    }
+
+    /* Full transformer + Dario field mode for first prompt */
+    printf("\n============================================================\n");
+    printf("  FULL MODE: transformer + Dario field (both attentions)\n");
+    printf("============================================================\n");
+
+    {
+        const char *prompt = (argc > 1) ? argv[1] : "PostGPT";
+        int prompt_len = bpe_encode((const unsigned char *)prompt,
+                                     (int)strlen(prompt), prompt_ids, 1024);
+
+        generate_full(prompt_ids, prompt_len, 30, bpe_vocab_size, 0.8f,
+                      output, sizeof(output));
+
+        int plen = (int)strlen(prompt);
+        printf("\n  prompt:       \"%s\"\n", prompt);
+        if ((int)strlen(output) > plen)
+            printf("  continuation: \"%.*s\"\n", 300, output + plen);
+        else
+            printf("  continuation: \"%s\"\n", output);
+    }
 
     printf("\n============================================================\n");
     printf("  PostGPT complete. The metaweights remember.\n");
+    printf("  Try: ./postgpt \"your prompt here\"\n");
     printf("============================================================\n");
 
     free(data);
