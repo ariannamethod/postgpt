@@ -21,7 +21,7 @@
 
 /* ───────────────────────── Configuration ───────────────────────── */
 
-#define MAX_MERGES     1024
+#define MAX_MERGES     1792
 #define MAX_VOCAB      (256 + MAX_MERGES)
 #define MAX_TOKENS     262144
 #define CONTEXT_LEN    64
@@ -34,6 +34,7 @@
 #define MLP_DIM        (4 * N_EMBD)
 #define HEBBIAN_CAP    100000
 #define BIGRAM_CAP     100000
+#define TRIGRAM_CAP    200000
 
 /* ───────────────────────── RNG ───────────────────────── */
 
@@ -202,15 +203,30 @@ typedef struct {
     float prob;
 } BigramEntry;
 
+typedef struct {
+    int a, b, c;    /* key=(a,b) -> c */
+    float prob;
+} TrigramEntry;
+
+typedef struct {
+    int a, b;       /* key=(min, max) */
+    float strength;
+} HebbianEntry;
+
 static float meta_unigram[MAX_VOCAB];
 static BigramEntry meta_bigrams[BIGRAM_CAP];
 static int meta_n_bigrams;
+static TrigramEntry meta_trigrams[TRIGRAM_CAP];
+static int meta_n_trigrams;
+static HebbianEntry meta_hebbians[HEBBIAN_CAP];
+static int meta_n_hebbians;
 static int meta_vocab_size;
 static int meta_total_tokens;
 
 static void meta_build(const int *tokens, int n) {
     meta_vocab_size = bpe_vocab_size;
     meta_total_tokens = n;
+    int window = 8;
 
     /* Unigram */
     memset(meta_unigram, 0, sizeof(meta_unigram));
@@ -223,10 +239,9 @@ static void meta_build(const int *tokens, int n) {
     if (total > 0)
         for (int i = 0; i < meta_vocab_size; i++) meta_unigram[i] /= total;
 
-    /* Bigram — store in hash table style */
+    /* ── Bigram — hash table counting ── */
     typedef struct { int a, b; int count; } BC;
     BC *bcounts = (BC *)calloc(65536, sizeof(BC));
-    int n_bc = 0;
 
     for (int i = 0; i + 1 < n; i++) {
         int a = tokens[i], b = tokens[i + 1];
@@ -237,7 +252,6 @@ static void meta_build(const int *tokens, int n) {
                 bcounts[idx].a = a;
                 bcounts[idx].b = b;
                 bcounts[idx].count = 1;
-                n_bc++;
                 break;
             }
             if (bcounts[idx].a == a && bcounts[idx].b == b) {
@@ -247,8 +261,6 @@ static void meta_build(const int *tokens, int n) {
         }
     }
 
-    /* Convert to normalized bigrams */
-    /* Group by 'a' and normalize */
     meta_n_bigrams = 0;
     for (int i = 0; i < 65536 && meta_n_bigrams < BIGRAM_CAP; i++) {
         if (bcounts[i].count > 0) {
@@ -259,7 +271,7 @@ static void meta_build(const int *tokens, int n) {
         }
     }
 
-    /* Normalize per 'a' */
+    /* Normalize bigrams per 'a' */
     for (int i = 0; i < meta_n_bigrams; i++) {
         int a = meta_bigrams[i].a;
         float total_a = 0;
@@ -270,9 +282,111 @@ static void meta_build(const int *tokens, int n) {
         if (total_a > 0)
             meta_bigrams[i].prob /= total_a;
     }
-
     free(bcounts);
-    printf("  metaweights built: %d tokens, %d bigram entries\n", n, meta_n_bigrams);
+
+    /* ── Trigram — hash table keyed on (a,b) -> c ── */
+    typedef struct { int a, b, c; int count; } TC;
+    int tri_cap = 131072;  /* 2^17 */
+    unsigned tri_mask = (unsigned)(tri_cap - 1);
+    TC *tcounts = (TC *)calloc(tri_cap, sizeof(TC));
+
+    for (int i = 0; i + 2 < n; i++) {
+        int a = tokens[i], b = tokens[i + 1], c = tokens[i + 2];
+        unsigned h = ((unsigned)a * 2654435761u ^ (unsigned)b * 2246822519u ^ (unsigned)c) & tri_mask;
+        for (int t = 0; t < 64; t++) {
+            unsigned idx = (h + t) & tri_mask;
+            if (tcounts[idx].count == 0) {
+                tcounts[idx].a = a;
+                tcounts[idx].b = b;
+                tcounts[idx].c = c;
+                tcounts[idx].count = 1;
+                break;
+            }
+            if (tcounts[idx].a == a && tcounts[idx].b == b && tcounts[idx].c == c) {
+                tcounts[idx].count++;
+                break;
+            }
+        }
+    }
+
+    meta_n_trigrams = 0;
+    for (int i = 0; i < tri_cap && meta_n_trigrams < TRIGRAM_CAP; i++) {
+        if (tcounts[i].count > 0) {
+            meta_trigrams[meta_n_trigrams].a = tcounts[i].a;
+            meta_trigrams[meta_n_trigrams].b = tcounts[i].b;
+            meta_trigrams[meta_n_trigrams].c = tcounts[i].c;
+            meta_trigrams[meta_n_trigrams].prob = (float)tcounts[i].count;
+            meta_n_trigrams++;
+        }
+    }
+
+    /* Normalize trigrams per (a,b) key */
+    for (int i = 0; i < meta_n_trigrams; i++) {
+        int a = meta_trigrams[i].a, b = meta_trigrams[i].b;
+        float total_k = 0;
+        for (int j = 0; j < meta_n_trigrams; j++) {
+            if (meta_trigrams[j].a == a && meta_trigrams[j].b == b)
+                total_k += meta_trigrams[j].prob;
+        }
+        if (total_k > 0)
+            meta_trigrams[i].prob /= total_k;
+    }
+    free(tcounts);
+
+    /* ── Hebbian trace — co-occurrence within window ── */
+    /* Cap to first 20K tokens for efficiency (O(n*window)) */
+    typedef struct { int a, b; float strength; } HC;
+    int hebb_cap = 65536;
+    unsigned hebb_mask = (unsigned)(hebb_cap - 1);
+    HC *hcounts = (HC *)calloc(hebb_cap, sizeof(HC));
+    int hebb_n = n < 20000 ? n : 20000;
+
+    for (int i = 0; i < hebb_n; i++) {
+        int lo = i - window; if (lo < 0) lo = 0;
+        int hi = i + window + 1; if (hi > hebb_n) hi = hebb_n;
+        for (int j = lo; j < hi; j++) {
+            if (i == j) continue;
+            int ka = tokens[i], kb = tokens[j];
+            int ma = ka < kb ? ka : kb;
+            int mb = ka < kb ? kb : ka;
+            float decay = 1.0f / (1.0f + (float)abs(i - j));
+            unsigned h = ((unsigned)ma * 2654435761u ^ (unsigned)mb * 2246822519u) & hebb_mask;
+            for (int t = 0; t < 64; t++) {
+                unsigned idx = (h + t) & hebb_mask;
+                if (hcounts[idx].strength == 0.0f && hcounts[idx].a == 0 && hcounts[idx].b == 0) {
+                    hcounts[idx].a = ma;
+                    hcounts[idx].b = mb;
+                    hcounts[idx].strength = decay;
+                    break;
+                }
+                if (hcounts[idx].a == ma && hcounts[idx].b == mb) {
+                    hcounts[idx].strength += decay;
+                    break;
+                }
+            }
+        }
+    }
+
+    /* Copy to flat array and normalize */
+    meta_n_hebbians = 0;
+    float max_h = 0;
+    for (int i = 0; i < hebb_cap && meta_n_hebbians < HEBBIAN_CAP; i++) {
+        if (hcounts[i].strength > 0) {
+            meta_hebbians[meta_n_hebbians].a = hcounts[i].a;
+            meta_hebbians[meta_n_hebbians].b = hcounts[i].b;
+            meta_hebbians[meta_n_hebbians].strength = hcounts[i].strength;
+            if (hcounts[i].strength > max_h) max_h = hcounts[i].strength;
+            meta_n_hebbians++;
+        }
+    }
+    if (max_h > 0) {
+        for (int i = 0; i < meta_n_hebbians; i++)
+            meta_hebbians[i].strength /= max_h;
+    }
+    free(hcounts);
+
+    printf("  metaweights built: %d tokens, %d bigram, %d trigram, %d hebbian\n",
+           n, meta_n_bigrams, meta_n_trigrams, meta_n_hebbians);
 }
 
 static void meta_query_bigram(int prev, float *dist, int vs) {
@@ -282,6 +396,81 @@ static void meta_query_bigram(int prev, float *dist, int vs) {
             dist[meta_bigrams[i].b] = meta_bigrams[i].prob;
         }
     }
+}
+
+static void meta_query_trigram(int prev2, int prev1, float *dist, int vs) {
+    for (int i = 0; i < vs; i++) dist[i] = 1e-10f;
+    for (int i = 0; i < meta_n_trigrams; i++) {
+        if (meta_trigrams[i].a == prev2 && meta_trigrams[i].b == prev1 &&
+            meta_trigrams[i].c < vs) {
+            dist[meta_trigrams[i].c] = meta_trigrams[i].prob;
+        }
+    }
+}
+
+static void meta_query_hebbian(const int *ctx, int ctx_len, float *signal, int vs) {
+    for (int i = 0; i < vs; i++) signal[i] = 0.0f;
+    for (int i = 0; i < meta_n_hebbians; i++) {
+        int ha = meta_hebbians[i].a;
+        int hb = meta_hebbians[i].b;
+        float s = meta_hebbians[i].strength;
+        for (int j = 0; j < ctx_len; j++) {
+            int ct = ctx[j];
+            if (ha == ct && hb < vs)
+                signal[hb] += s;
+            else if (hb == ct && ha < vs)
+                signal[ha] += s;
+        }
+    }
+    /* Normalize */
+    float mx = 0;
+    for (int i = 0; i < vs; i++) if (signal[i] > mx) mx = signal[i];
+    if (mx > 0)
+        for (int i = 0; i < vs; i++) signal[i] /= mx;
+}
+
+static void meta_query_prophecy(const int *ctx, int ctx_len, float *signal, int vs, int top_k) {
+    for (int i = 0; i < vs; i++) signal[i] = 0.0f;
+
+    /* Mark tokens that already appeared in context */
+    char *appeared = (char *)calloc(vs, 1);
+    for (int i = 0; i < ctx_len; i++)
+        if (ctx[i] < vs) appeared[ctx[i]] = 1;
+
+    /* For each of the last 4 context tokens, find top-k bigram successors not yet seen */
+    int start = ctx_len - 4;
+    if (start < 0) start = 0;
+    for (int ci = start; ci < ctx_len; ci++) {
+        int ct = ctx[ci];
+        /* Collect bigram successors for ct, sort by prob, take top_k */
+        typedef struct { int tok; float prob; } Cand;
+        Cand cands[256];
+        int n_cands = 0;
+        for (int i = 0; i < meta_n_bigrams && n_cands < 256; i++) {
+            if (meta_bigrams[i].a == ct && meta_bigrams[i].b < vs) {
+                cands[n_cands].tok = meta_bigrams[i].b;
+                cands[n_cands].prob = meta_bigrams[i].prob;
+                n_cands++;
+            }
+        }
+        /* Simple selection sort for top_k */
+        int limit = n_cands < top_k ? n_cands : top_k;
+        for (int i = 0; i < limit; i++) {
+            int best = i;
+            for (int j = i + 1; j < n_cands; j++)
+                if (cands[j].prob > cands[best].prob) best = j;
+            if (best != i) { Cand tmp = cands[i]; cands[i] = cands[best]; cands[best] = tmp; }
+            if (!appeared[cands[i].tok])
+                signal[cands[i].tok] += cands[i].prob;
+        }
+    }
+    free(appeared);
+
+    /* Normalize */
+    float mx = 0;
+    for (int i = 0; i < vs; i++) if (signal[i] > mx) mx = signal[i];
+    if (mx > 0)
+        for (int i = 0; i < vs; i++) signal[i] /= mx;
 }
 
 /* ───────────────────────── Transformer Weights ───────────────────────── */
@@ -519,32 +708,127 @@ static void generate_meta(const int *prompt, int prompt_len, int max_tokens,
     int gen_len = prompt_len;
     memcpy(generated, prompt, prompt_len * sizeof(int));
 
-    float *probs = (float *)malloc(vocab_size * sizeof(float));
-    float *bigram_dist = (float *)malloc(vocab_size * sizeof(float));
+    /* Sparse candidate approach matching Python's generate_meta:
+       trigram first (strongest), fallback to bigram, then unigram.
+       Hebbian boost, repetition penalty, top-k filtering. */
+
+    typedef struct { int tok; float score; } Cand;
+    Cand *cands = (Cand *)malloc(vocab_size * sizeof(Cand));
 
     for (int step = 0; step < max_tokens && gen_len < 4096; step++) {
         int last = generated[gen_len - 1];
+        int n_cands = 0;
+        int found_trigram = 0;
 
-        /* Query bigram metaweights */
-        meta_query_bigram(last, bigram_dist, vocab_size);
-
-        /* Build probability from metaweights */
-        for (int i = 0; i < vocab_size; i++) {
-            probs[i] = 2.0f * bigram_dist[i] + 0.01f * meta_unigram[i];
+        /* Try trigram first (strongest signal) */
+        if (gen_len >= 2) {
+            int prev2 = generated[gen_len - 2];
+            for (int i = 0; i < meta_n_trigrams; i++) {
+                if (meta_trigrams[i].a == prev2 && meta_trigrams[i].b == last &&
+                    meta_trigrams[i].c < vocab_size) {
+                    cands[n_cands].tok = meta_trigrams[i].c;
+                    cands[n_cands].score = meta_trigrams[i].prob;
+                    n_cands++;
+                    found_trigram = 1;
+                }
+            }
         }
 
-        /* Temperature */
-        for (int i = 0; i < vocab_size; i++)
-            probs[i] /= temperature;
+        /* Fallback to bigram */
+        if (!found_trigram) {
+            for (int i = 0; i < meta_n_bigrams; i++) {
+                if (meta_bigrams[i].a == last && meta_bigrams[i].b < vocab_size) {
+                    cands[n_cands].tok = meta_bigrams[i].b;
+                    cands[n_cands].score = meta_bigrams[i].prob;
+                    n_cands++;
+                }
+            }
+        }
 
-        softmax_inplace(probs, vocab_size);
-        int chosen = sample_from_probs(probs, vocab_size);
+        /* Fallback to unigram (last resort) */
+        if (n_cands == 0) {
+            for (int i = 0; i < vocab_size; i++) {
+                if (meta_unigram[i] > 1e-8f) {
+                    cands[n_cands].tok = i;
+                    cands[n_cands].score = meta_unigram[i];
+                    n_cands++;
+                }
+            }
+        }
+
+        if (n_cands == 0) break;
+
+        /* Hebbian boost — contextual reinforcement */
+        int ctx_start = gen_len - 4;
+        if (ctx_start < 0) ctx_start = 0;
+        for (int ci = 0; ci < n_cands; ci++) {
+            int tok = cands[ci].tok;
+            for (int j = ctx_start; j < gen_len; j++) {
+                int ct = generated[j];
+                int ma = tok < ct ? tok : ct;
+                int mb = tok < ct ? ct : tok;
+                for (int h = 0; h < meta_n_hebbians; h++) {
+                    if (meta_hebbians[h].a == ma && meta_hebbians[h].b == mb) {
+                        cands[ci].score *= (1.0f + 0.3f * meta_hebbians[h].strength);
+                        break;
+                    }
+                }
+            }
+        }
+
+        /* Repetition penalty (12-token window) */
+        int rep_start = gen_len - 12;
+        if (rep_start < 0) rep_start = 0;
+        for (int ci = 0; ci < n_cands; ci++) {
+            int freq = 0;
+            for (int j = rep_start; j < gen_len; j++) {
+                if (generated[j] == cands[ci].tok) freq++;
+            }
+            if (freq > 0) {
+                float penalty = 1.0f / (1.0f + 0.5f * freq);
+                cands[ci].score *= penalty;
+            }
+        }
+
+        /* Top-k filtering (keep top 15) */
+        int top_k = 15;
+        int limit = n_cands < top_k ? n_cands : top_k;
+        for (int i = 0; i < limit; i++) {
+            int best = i;
+            for (int j = i + 1; j < n_cands; j++)
+                if (cands[j].score > cands[best].score) best = j;
+            if (best != i) { Cand tmp = cands[i]; cands[i] = cands[best]; cands[best] = tmp; }
+        }
+        n_cands = limit;
+
+        /* Log-space temperature scaling + softmax (matching Python) */
+        float log_scores[16];
+        float max_ls = -1e30f;
+        for (int i = 0; i < n_cands; i++) {
+            log_scores[i] = logf(cands[i].score + 1e-10f) / temperature;
+            if (log_scores[i] > max_ls) max_ls = log_scores[i];
+        }
+        float total_e = 0;
+        float probs_local[16];
+        for (int i = 0; i < n_cands; i++) {
+            probs_local[i] = expf(log_scores[i] - max_ls);
+            total_e += probs_local[i];
+        }
+        for (int i = 0; i < n_cands; i++)
+            probs_local[i] /= total_e;
+
+        /* Sample */
+        float r = randf();
+        float cum = 0;
+        int chosen = cands[0].tok;
+        for (int i = 0; i < n_cands; i++) {
+            cum += probs_local[i];
+            if (cum > r) { chosen = cands[i].tok; break; }
+        }
         generated[gen_len++] = chosen;
     }
 
-    free(probs);
-    free(bigram_dist);
-
+    free(cands);
     bpe_decode(generated, gen_len, out, max_out);
 }
 
@@ -556,6 +840,22 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
 
     float *logits = (float *)malloc(vocab_size * sizeof(float));
     float *bigram_dist = (float *)malloc(vocab_size * sizeof(float));
+    float *trigram_dist = (float *)malloc(vocab_size * sizeof(float));
+    float *hebbian_sig = (float *)malloc(vocab_size * sizeof(float));
+    float *prophecy_sig = (float *)malloc(vocab_size * sizeof(float));
+    float *destiny_sig = (float *)malloc(vocab_size * sizeof(float));
+
+    /* Dario field coefficients */
+    float alpha_hebbian = 0.3f;
+    float beta_prophecy = 0.2f;
+    float gamma_destiny = 0.15f;
+
+    /* Destiny vector (EMA of token embeddings) */
+    float destiny[N_EMBD];
+    memset(destiny, 0, sizeof(destiny));
+
+    /* Trauma accumulator */
+    float trauma = 0.0f;
 
     kv_len = 0;
 
@@ -572,12 +872,102 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
         int last = generated[gen_len - 1];
         forward_token(last, pos, logits, vocab_size);
 
-        /* Dario field overlay */
-        meta_query_bigram(last, bigram_dist, vocab_size);
-        for (int i = 0; i < vocab_size; i++)
-            logits[i] += 1.5f * bigram_dist[i];
+        /* ── Dario Field: full metaweight overlay ── */
 
-        /* Temperature + sample */
+        /* Hebbian signal (use last 8 tokens as context) */
+        int hctx_start = gen_len - 8;
+        if (hctx_start < 0) hctx_start = 0;
+        meta_query_hebbian(&generated[hctx_start], gen_len - hctx_start,
+                           hebbian_sig, vocab_size);
+
+        /* Prophecy signal */
+        meta_query_prophecy(&generated[hctx_start], gen_len - hctx_start,
+                            prophecy_sig, vocab_size, 16);
+
+        /* Bigram signal */
+        meta_query_bigram(last, bigram_dist, vocab_size);
+
+        /* Trigram signal */
+        if (gen_len >= 2) {
+            meta_query_trigram(generated[gen_len - 2], last, trigram_dist, vocab_size);
+        } else {
+            for (int i = 0; i < vocab_size; i++) trigram_dist[i] = 0.0f;
+        }
+
+        /* Destiny update: EMA of token embeddings */
+        if (last < MAX_VOCAB) {
+            for (int d = 0; d < N_EMBD; d++)
+                destiny[d] = 0.9f * destiny[d] + 0.1f * W.wte[last][d];
+        }
+
+        /* Destiny signal: cosine similarity with each token embedding */
+        float dest_norm_sq = 0;
+        for (int d = 0; d < N_EMBD; d++) dest_norm_sq += destiny[d] * destiny[d];
+        float dest_norm = sqrtf(dest_norm_sq + 1e-10f);
+        for (int i = 0; i < vocab_size; i++) destiny_sig[i] = 0.0f;
+
+        if (dest_norm > 1e-8f) {
+            for (int tid = 0; tid < vocab_size && tid < MAX_VOCAB; tid++) {
+                float dot = 0, emb_sq = 0;
+                for (int d = 0; d < N_EMBD; d++) {
+                    dot += destiny[d] * W.wte[tid][d];
+                    emb_sq += W.wte[tid][d] * W.wte[tid][d];
+                }
+                float emb_norm = sqrtf(emb_sq + 1e-10f);
+                if (emb_norm > 1e-8f)
+                    destiny_sig[tid] = dot / (dest_norm * emb_norm);
+            }
+        }
+
+        /* Combine: full Dario Equation */
+        for (int i = 0; i < vocab_size; i++) {
+            logits[i] += alpha_hebbian * hebbian_sig[i]
+                       + beta_prophecy * prophecy_sig[i]
+                       + gamma_destiny * destiny_sig[i]
+                       + 12.0f * bigram_dist[i]
+                       + 8.0f * trigram_dist[i];
+        }
+
+        /* Trauma modulation */
+        float trauma_mod = 1.0f / (1.0f + trauma);
+        for (int i = 0; i < vocab_size; i++)
+            logits[i] *= trauma_mod;
+
+        /* Repetition penalty (12-token window, multiply by 0.5) */
+        int rep_start = gen_len - 12;
+        if (rep_start < 0) rep_start = 0;
+        for (int j = rep_start; j < gen_len; j++) {
+            int t = generated[j];
+            if (t < vocab_size)
+                logits[t] *= 0.5f;
+        }
+
+        /* Top-k filtering (keep top 15, mask rest to -1e10) */
+        {
+            /* Find the 15th largest value */
+            float top_vals[15];
+            for (int i = 0; i < 15; i++) top_vals[i] = -1e30f;
+            for (int i = 0; i < vocab_size; i++) {
+                if (logits[i] > top_vals[14]) {
+                    top_vals[14] = logits[i];
+                    /* Bubble up */
+                    for (int k = 13; k >= 0; k--) {
+                        if (top_vals[k + 1] > top_vals[k]) {
+                            float tmp = top_vals[k];
+                            top_vals[k] = top_vals[k + 1];
+                            top_vals[k + 1] = tmp;
+                        } else break;
+                    }
+                }
+            }
+            float threshold = top_vals[14];
+            for (int i = 0; i < vocab_size; i++) {
+                if (logits[i] < threshold)
+                    logits[i] = -1e10f;
+            }
+        }
+
+        /* Temperature + softmax + sample */
         for (int i = 0; i < vocab_size; i++)
             logits[i] /= temperature;
         softmax_inplace(logits, vocab_size);
@@ -588,6 +978,10 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
 
     free(logits);
     free(bigram_dist);
+    free(trigram_dist);
+    free(hebbian_sig);
+    free(prophecy_sig);
+    free(destiny_sig);
 
     bpe_decode(generated, gen_len, out, max_out);
 }
@@ -620,7 +1014,7 @@ int main(int argc, char **argv) {
     printf("\n[2] Learning BPE merges...\n");
     bpe_init_vocab();
     int *tokens = (int *)malloc(fsize * sizeof(int));
-    int n_tokens = bpe_learn(data, fsize, 1024, tokens);
+    int n_tokens = bpe_learn(data, fsize, MAX_MERGES, tokens);
 
     /* Build metaweights */
     printf("\n[3] Building metaweight probability space...\n");
@@ -669,7 +1063,7 @@ int main(int argc, char **argv) {
         int prompt_len = bpe_encode((const unsigned char *)prompt,
                                      (int)strlen(prompt), prompt_ids, 1024);
 
-        generate_meta(prompt_ids, prompt_len, 100, bpe_vocab_size, 0.72f,
+        generate_meta(prompt_ids, prompt_len, 100, bpe_vocab_size, 0.75f,
                       output, sizeof(output));
 
         /* Show prompt and continuation separately */
@@ -691,7 +1085,7 @@ int main(int argc, char **argv) {
         int prompt_len = bpe_encode((const unsigned char *)prompt,
                                      (int)strlen(prompt), prompt_ids, 1024);
 
-        generate_full(prompt_ids, prompt_len, 30, bpe_vocab_size, 0.8f,
+        generate_full(prompt_ids, prompt_len, 30, bpe_vocab_size, 0.85f,
                       output, sizeof(output));
 
         int plen = (int)strlen(prompt);
