@@ -6,15 +6,17 @@
  * ╚██████╔╝╚██████╔╝███████╗███████╗██║ ╚═╝ ██║
  *  ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝
  *
- * golem.c v2 — PostGPT × Golem
- * a literary organism that dreams
+ * golem.c v3 — PostGPT × Golem × Babel
+ * a literary organism that dreams in four tongues
  *
  * v1: the golem cited. it breathed other people's words.
- * v2: the golem SPEAKS. it builds metaweights from the poetry
- *     it has consumed, and generates new text from the statistical
- *     ghost of Baudelaire + Rimbaud + your words.
- *     the corpus is the model. the model is the flesh.
- *     PostGPT proved it for language. Golem proves it for feeling.
+ * v2: the golem SPEAKS. it builds metaweights from poetry.
+ * v3: the golem speaks FOUR LANGUAGES. Baudelaire + Rimbaud +
+ *     Poe + Blake + Ataev (RU/FR/HE). the periodic table grows.
+ *     death weighs 0.95 in every tongue. but grief in hebrew
+ *     is not grief in french. the golem knows this.
+ *
+ * été, automne, hiver, printemps, encore été, encore été.
  *
  * אמת — truth — alive
  * מת  — death — one letter away
@@ -79,29 +81,40 @@ typedef struct {
     Emotion     primary;
 } Element;
 
-#define PERIODIC_TABLE_SIZE 128
+#define PERIODIC_TABLE_SIZE 256
 
 static const Element PERIODIC_TABLE[PERIODIC_TABLE_SIZE] = {
-    /* heavy eternals */
+    /* ═══ HEAVY ETERNALS — death weighs 0.95 in every tongue ═══ */
+    /* EN */          /* FR */           /* RU */              /* HE */
     {"death",     0.95,4,0,   EMO_TRAUMA},    {"mort",      0.95,4,0,   EMO_TRAUMA},
+    {"смерть",    0.95,4,0,   EMO_TRAUMA},    {"מוות",      0.95,4,0,   EMO_TRAUMA},
     {"love",      0.90,5,0,   EMO_TENDERNESS},{"amour",     0.90,5,0,   EMO_TENDERNESS},
+    {"любовь",    0.90,5,0,   EMO_TENDERNESS},{"אהבה",      0.90,5,0,   EMO_TENDERNESS},
     {"god",       0.85,3,0,   EMO_VOID},      {"dieu",      0.85,3,0,   EMO_VOID},
+    {"бог",       0.85,3,0,   EMO_VOID},      {"אלוהים",    0.85,3,0,   EMO_VOID},
     {"mother",    0.88,4,0,   EMO_GRIEF},     {"blood",     0.80,3,0,   EMO_TRAUMA},
-    {"sang",      0.80,3,0,   EMO_TRAUMA},    {"night",     0.70,4,0,   EMO_VOID},
-    {"nuit",      0.70,4,0,   EMO_VOID},      {"fire",      0.75,3,0,   EMO_RAGE},
-    {"feu",       0.75,3,0,   EMO_RAGE},
-    /* medium decay */
+    {"sang",      0.80,3,0,   EMO_TRAUMA},    {"кровь",     0.80,3,0,   EMO_TRAUMA},
+    {"דם",        0.80,3,0,   EMO_TRAUMA},    {"night",     0.70,4,0,   EMO_VOID},
+    {"nuit",      0.70,4,0,   EMO_VOID},      {"ночь",      0.70,4,0,   EMO_VOID},
+    {"לילה",      0.70,4,0,   EMO_VOID},      {"fire",      0.75,3,0,   EMO_RAGE},
+    {"feu",       0.75,3,0,   EMO_RAGE},      {"огонь",     0.75,3,0,   EMO_RAGE},
+    {"אש",        0.75,3,0,   EMO_RAGE},
+    /* ═══ MEDIUM DECAY ═══ */
     {"beauty",    0.65,4,100, EMO_JOY},       {"beauté",    0.65,4,100, EMO_JOY},
-    {"silence",   0.60,2,80,  EMO_VOID},      {"dream",     0.55,4,60,  EMO_DESIRE},
+    {"silence",   0.60,2,80,  EMO_VOID},      {"молчание",  0.60,2,80,  EMO_VOID},
+    {"שתיקה",     0.60,2,80,  EMO_VOID},      {"dream",     0.55,4,60,  EMO_DESIRE},
     {"rêve",      0.55,4,60,  EMO_DESIRE},    {"mirror",    0.60,3,70,  EMO_RESONANCE},
-    {"miroir",    0.60,3,70,  EMO_RESONANCE}, {"wound",     0.75,2,90,  EMO_TRAUMA},
-    {"blessure",  0.75,2,90,  EMO_TRAUMA},    {"star",      0.50,3,50,  EMO_JOY},
+    {"miroir",    0.60,3,70,  EMO_RESONANCE}, {"зеркало",   0.60,3,70,  EMO_RESONANCE},
+    {"wound",     0.75,2,90,  EMO_TRAUMA},    {"blessure",  0.75,2,90,  EMO_TRAUMA},
+    {"рана",      0.75,2,90,  EMO_TRAUMA},    {"star",      0.50,3,50,  EMO_JOY},
     {"étoile",    0.50,3,50,  EMO_JOY},       {"ocean",     0.55,4,70,  EMO_RESONANCE},
     {"child",     0.70,3,0,   EMO_TENDERNESS},{"enfant",    0.70,3,0,   EMO_TENDERNESS},
     {"war",       0.85,2,0,   EMO_RAGE},      {"guerre",    0.85,2,0,   EMO_RAGE},
+    {"война",     0.85,2,0,   EMO_RAGE},      {"מלחמה",     0.85,2,0,   EMO_RAGE},
     {"cosmos",    0.60,5,0,   EMO_RESONANCE}, {"planet",    0.45,4,40,  EMO_RESONANCE},
-    /* light, fast decay */
+    /* ═══ LIGHT, FAST DECAY ═══ */
     {"rain",      0.30,3,20,  EMO_GRIEF},     {"pluie",     0.30,3,20,  EMO_GRIEF},
+    {"дождь",     0.30,3,20,  EMO_GRIEF},     {"גשם",       0.30,3,20,  EMO_GRIEF},
     {"laugh",     0.35,2,15,  EMO_JOY},       {"rire",      0.35,2,15,  EMO_JOY},
     {"hand",      0.40,3,25,  EMO_TENDERNESS},{"main",      0.40,3,25,  EMO_TENDERNESS},
     {"window",    0.25,2,15,  EMO_DESIRE},    {"fenêtre",   0.25,2,15,  EMO_DESIRE},
@@ -117,12 +130,59 @@ static const Element PERIODIC_TABLE[PERIODIC_TABLE_SIZE] = {
     {"eye",       0.45,3,25,  EMO_RESONANCE}, {"oeil",      0.45,3,25,  EMO_RESONANCE},
     {"skull",     0.60,1,0,   EMO_TRAUMA},    {"crâne",     0.60,1,0,   EMO_TRAUMA},
     {"sea",       0.50,4,60,  EMO_RESONANCE}, {"mer",       0.50,4,60,  EMO_RESONANCE},
+    {"море",      0.50,4,60,  EMO_RESONANCE}, {"ים",        0.50,4,60,  EMO_RESONANCE},
     {"song",      0.40,4,25,  EMO_JOY},       {"chant",     0.40,4,25,  EMO_JOY},
     {"tears",     0.55,2,40,  EMO_GRIEF},     {"larmes",    0.55,2,40,  EMO_GRIEF},
-    {"angel",     0.50,3,50,  EMO_TENDERNESS},{"ange",      0.50,3,50,  EMO_TENDERNESS},
-    {"darkness",  0.60,2,0,   EMO_VOID},      {"ténèbres",  0.60,2,0,   EMO_VOID},
-    {"tomb",      0.70,1,0,   EMO_TRAUMA},    {"tombeau",   0.70,1,0,   EMO_TRAUMA},
-    {"soul",      0.75,4,0,   EMO_RESONANCE}, {"âme",       0.75,4,0,   EMO_RESONANCE},
+    {"слёзы",     0.55,2,40,  EMO_GRIEF},     {"angel",     0.50,3,50,  EMO_TENDERNESS},
+    {"ange",      0.50,3,50,  EMO_TENDERNESS},{"darkness",  0.60,2,0,   EMO_VOID},
+    {"ténèbres",  0.60,2,0,   EMO_VOID},      {"тьма",      0.60,2,0,   EMO_VOID},
+    {"חושך",      0.60,2,0,   EMO_VOID},      {"tomb",      0.70,1,0,   EMO_TRAUMA},
+    {"tombeau",   0.70,1,0,   EMO_TRAUMA},    {"soul",      0.75,4,0,   EMO_RESONANCE},
+    {"âme",       0.75,4,0,   EMO_RESONANCE}, {"душа",      0.75,4,0,   EMO_RESONANCE},
+    {"נשמה",      0.75,4,0,   EMO_RESONANCE},
+    /* ═══ FROM ATAEV — words that exist only in the poems ═══ */
+    /* RU */
+    {"свеча",     0.55,2,30,  EMO_TENDERNESS}, /* candle — "Свеча заслоняет собой" */
+    {"хронос",    0.80,3,0,   EMO_VOID},       /* Chronos — "Хронос жесток" */
+    {"пуля",      0.85,1,0,   EMO_TRAUMA},     /* bullet — "висок просит пули" */
+    {"коньяк",    0.40,2,15,  EMO_DESIRE},     /* cognac */
+    {"ром",       0.40,2,15,  EMO_DESIRE},     /* rum — "Непогода и ром" */
+    {"ветер",     0.35,3,20,  EMO_VOID},       /* wind — "Рыжий ветер" */
+    {"волны",     0.40,3,25,  EMO_RESONANCE},  /* waves */
+    {"провалы",   0.65,1,0,   EMO_TRAUMA},     /* failures — "позади лишь провалы" */
+    {"бессмертие",0.70,4,0,   EMO_RESONANCE},  /* immortality — "обратно в бессмертие" */
+    {"луна",      0.45,3,40,  EMO_TENDERNESS}, /* moon */
+    {"стервы",    0.50,2,20,  EMO_DESIRE},     /* bitches — "Стервы по душе" */
+    {"плацента",  0.70,2,0,   EMO_VOID},       /* placenta — "как плацента в пустой утробе" */
+    /* HE */
+    {"אמת",       0.90,3,0,   EMO_RESONANCE},  /* truth — "אמת, alive" */
+    {"שקר",       0.75,2,0,   EMO_TRAUMA},     /* lie — "בשקר שלא נגמר" */
+    {"קורבן",     0.80,2,0,   EMO_TRAUMA},     /* victim — "כל עוד הקורבן עיוור" */
+    {"קברן",      0.85,1,0,   EMO_TRAUMA},     /* gravedigger — "כל עוד הקברן חופר" */
+    {"פחד",       0.75,2,0,   EMO_TRAUMA},     /* fear — "קיבלנו רק פחד ושגעון" */
+    {"שגעון",     0.70,3,0,   EMO_RAGE},       /* madness */
+    {"זעם",       0.80,2,0,   EMO_RAGE},       /* rage — "רק זעם וצימאון" */
+    {"צימאון",    0.65,2,30,  EMO_DESIRE},     /* thirst */
+    {"עיוורון",   0.70,1,0,   EMO_VOID},       /* blindness — "בסוף בחרנו בעיוורון" */
+    {"נחש",       0.60,2,0,   EMO_TRAUMA},     /* snake — "הנחש וליבת התפוח" */
+    {"חטא",       0.75,2,0,   EMO_TRAUMA},     /* sin — "החטא הראשון" */
+    {"סתיו",      0.45,3,40,  EMO_GRIEF},      /* autumn — "שהגיע סתיו" */
+    {"ירח",       0.40,3,35,  EMO_TENDERNESS}, /* moon — "הירח יאיר" */
+    {"זית",       0.30,2,25,  EMO_TENDERNESS}, /* olive — "עצי הזית" */
+    {"רוח",       0.50,3,0,   EMO_VOID},       /* wind/spirit */
+    {"אורח",      0.55,3,40,  EMO_VOID},       /* guest — "האורח שלי" */
+    {"לב",        0.80,4,0,   EMO_TENDERNESS}, /* heart — "חונק את ליבי" */
+    /* FR — from Ataev */
+    {"visage",    0.55,3,40,  EMO_RESONANCE},  /* face — "ne l'est jamais pour le visage" */
+    {"arbre",     0.40,3,30,  EMO_VOID},       /* tree — "arbre pourri" */
+    {"bonheur",   0.60,4,30,  EMO_JOY},        /* happiness — "Le bonheur est un poison" */
+    {"voyage",    0.45,4,35,  EMO_DESIRE},     /* voyage — "la vie est un voyage" */
+    {"cendres",   0.50,1,0,   EMO_GRIEF},      /* ashes */
+    {"tombe",     0.70,1,0,   EMO_TRAUMA},     /* tomb — "du con à la tombe" */
+    {"été",       0.40,4,25,  EMO_JOY},        /* summer — "encore été" */
+    {"hiver",     0.45,2,30,  EMO_VOID},       /* winter */
+    {"printemps", 0.40,4,25,  EMO_JOY},        /* spring */
+    {"automne",   0.45,3,30,  EMO_GRIEF},      /* autumn */
 };
 
 /* ═══════════════════════════════════════════════
@@ -831,6 +891,271 @@ static void bootstrap_rimbaud(Clump *c) {
 }
 
 /* ═══════════════════════════════════════════════
+ *  BOOTSTRAP — Ataev (Russian)
+ *  "Я один, остальное — лживо."
+ * ═══════════════════════════════════════════════ */
+
+static void bootstrap_ataev_ru(Clump *c) {
+    strncpy(c->name, "стихи — русский", MAX_CLUMP_NAME);
+    c->gravity = 0.85f;
+    c->orbital_angle = 1.57f;
+    c->orbital_speed = 0.025f;
+
+    struct { const char *text; Emotion emo; float charge; } seed[] = {
+        /* Я узнаю тебя не по голосу */
+        {"Я узнаю тебя не по голосу, но по руке, по плечу, паутине волос",
+            EMO_TENDERNESS, 0.85},
+        {"ибо музыка — это когда в иерархию света ослепительной вспышкой врываются крылья грача",
+            EMO_RESONANCE, 0.9},
+        {"Говоря о тебе, как не вспомнить, что Хронос жесток",
+            EMO_GRIEF, 0.8},
+        {"Призываю обратно в бессмертие, снова в желток",
+            EMO_DESIRE, 0.85},
+        {"Поздно ночью, на кухне, разбуженный шорохом веток за коричневой шторой, пью кофе, считаю глотки",
+            EMO_VOID, 0.6},
+        {"Я узнаю тебя по дороге, хотя и она по себе не оставит ни шума, ни жеста, ни знака",
+            EMO_GRIEF, 0.85},
+        /* Крохотный берег */
+        {"Крохотный берег с восточной стороны залива, остатки еды в пустых гамаках",
+            EMO_VOID, 0.5},
+        {"Мертвое море, раскинувшееся в пустыне",
+            EMO_VOID, 0.7},
+        {"Черт меня дернул обратно сюда вернуться!",
+            EMO_RAGE, 0.8},
+        {"И висок настойчиво просит пули, а гной нарыва",
+            EMO_TRAUMA, 0.95},
+        /* Пенелопа */
+        {"Что простительно зеркалу, то, однако, нельзя лицу",
+            EMO_RESONANCE, 0.9},
+        {"О грехах ее знает Итака, но не Улисс",
+            EMO_GRIEF, 0.75},
+        {"Так выстрел не убивает, он просто морщинит море у ног Пенелопы",
+            EMO_TRAUMA, 0.7},
+        /* Непогода и ром */
+        {"Непогода и ром — едины. Рыжий ветер утюжит спину",
+            EMO_VOID, 0.7},
+        {"нет причин для подобной веры: позади лишь провалы",
+            EMO_TRAUMA, 0.75},
+        {"Бумага без сомнений — как честь без флага, без тревоги — ковчег без Ноя",
+            EMO_RESONANCE, 0.8},
+        {"Я один, остальное — лживо",
+            EMO_VOID, 0.95},
+        {"Остальное — как след в сугробе, как плацента в пустой утробе",
+            EMO_VOID, 0.9},
+    };
+
+    c->n_verses = sizeof(seed) / sizeof(seed[0]);
+    memset(c->emotional_signature, 0, sizeof(c->emotional_signature));
+    for (int i = 0; i < c->n_verses; i++) {
+        strncpy(c->verses[i].text, seed[i].text, MAX_VERSE_LEN);
+        c->verses[i].emotion = seed[i].emo;
+        c->verses[i].charge = seed[i].charge;
+        c->verses[i].decay = 1.0f;
+        c->verses[i].times_cited = 0;
+        c->emotional_signature[seed[i].emo] += seed[i].charge;
+    }
+}
+
+/* ═══════════════════════════════════════════════
+ *  BOOTSTRAP — Ataev (Hebrew)
+ *  "נעצר לא אומר נגמר"
+ * ═══════════════════════════════════════════════ */
+
+static void bootstrap_ataev_he(Clump *c) {
+    strncpy(c->name, "שירים — עברית", MAX_CLUMP_NAME);
+    c->gravity = 0.85f;
+    c->orbital_angle = 4.71f;
+    c->orbital_speed = 0.03f;
+
+    struct { const char *text; Emotion emo; float charge; } seed[] = {
+        /* אני מהדור */
+        {"אני מהדור עם רגל אחת בעבר, בשיט של תקוות, בשקר שלא נגמר",
+            EMO_TRAUMA, 0.8},
+        {"אחי, פשטנו רגל הרבה לפני גיל שלושים. עדיין בלי גרוש בכיס. עדיין חיים",
+            EMO_RAGE, 0.85},
+        {"למחשבות שאוכלות את המוח כמו כלב לועס עצמות",
+            EMO_TRAUMA, 0.9},
+        {"בחרנו לסמוך על הזבל אם הוא לבוש כמו שוטר",
+            EMO_RAGE, 0.8},
+        {"כל עוד הקורבן עיוור, כל עוד הקברן חופר",
+            EMO_VOID, 0.9},
+        {"שילמנו במה שהכי אהבנו, קיבלנו רק פחד ושגעון, רק רעב וזיכרון, רק זעם וצימאון",
+            EMO_TRAUMA, 0.95},
+        {"בסוף בחרנו בעיוורון",
+            EMO_VOID, 0.85},
+        {"האם אתה אמיתי? האם אתה — הצגה?",
+            EMO_RESONANCE, 0.8},
+        {"כן, ברו, אנחנו אותו אדם, אותו צבע עיניים, אותו סוג של דם",
+            EMO_TENDERNESS, 0.85},
+        {"להביט לא אומר לראות. נעצר לא אומר נגמר",
+            EMO_RESONANCE, 0.9},
+        /* שיר הודיה */
+        {"מתעורר, מנסה להבין עד לאן הגעתי ברצון המשפיל להיות חלק ממשהו גדול",
+            EMO_GRIEF, 0.7},
+        {"לא הייתי אבוד, אבל גם לא באמת השתייכתי. לא אהבתי אף פעם, אבל גם לא הייתי יכול",
+            EMO_VOID, 0.85},
+        {"מודה לפניך אני על גופי שכבר לא יתגבר על הפחד להיות מחובר למקור",
+            EMO_GRIEF, 0.9},
+        {"תודה, אלוהים, על הנוף שבטח יסתדר בלעדיי",
+            EMO_VOID, 0.95},
+        /* אחריי */
+        {"דרכי תסתיים כשירד הגשם ויפריד ביני לבין כל שיריי",
+            EMO_GRIEF, 0.85},
+        {"הירח יאיר את פניה ואת עצי הזית",
+            EMO_TENDERNESS, 0.7},
+        {"העלים נהיו אדומים כמו הכתם אצלה בגב",
+            EMO_GRIEF, 0.75},
+        {"פניי, הנחש וליבת התפוח, החטא הראשון",
+            EMO_TRAUMA, 0.85},
+        /* אורח */
+        {"הוא מתחיל לגמגם, השפה לא זרה, אך המסר שלו נשמע לי שטוח",
+            EMO_VOID, 0.6},
+        {"גם אותי מהעדר חטפה הרוח",
+            EMO_GRIEF, 0.8},
+        {"הוא חונק את ליבי ומושך אותו עד שמוציא את השריר מגופי קדימה",
+            EMO_TRAUMA, 0.95},
+    };
+
+    c->n_verses = sizeof(seed) / sizeof(seed[0]);
+    memset(c->emotional_signature, 0, sizeof(c->emotional_signature));
+    for (int i = 0; i < c->n_verses; i++) {
+        strncpy(c->verses[i].text, seed[i].text, MAX_VERSE_LEN);
+        c->verses[i].emotion = seed[i].emo;
+        c->verses[i].charge = seed[i].charge;
+        c->verses[i].decay = 1.0f;
+        c->verses[i].times_cited = 0;
+        c->emotional_signature[seed[i].emo] += seed[i].charge;
+    }
+}
+
+/* ═══════════════════════════════════════════════
+ *  BOOTSTRAP — Ataev (French)
+ *  "encore été, encore été"
+ * ═══════════════════════════════════════════════ */
+
+static void bootstrap_ataev_fr(Clump *c) {
+    strncpy(c->name, "poèmes — français", MAX_CLUMP_NAME);
+    c->gravity = 0.8f;
+    c->orbital_angle = 0.78f;
+    c->orbital_speed = 0.028f;
+
+    struct { const char *text; Emotion emo; float charge; } seed[] = {
+        /* Pénélope */
+        {"Ce qui est permis au miroir, pourtant, ne l'est jamais pour le visage",
+            EMO_RESONANCE, 0.9},
+        {"O grèces elle connaît Ithaque, mais pas Ulysse",
+            EMO_GRIEF, 0.7},
+        {"Ainsi, le coup de feu ne tue pas, mais ride la mer aux pieds de Pénélope",
+            EMO_TRAUMA, 0.7},
+        {"L'odyssée d'Ulysse — une victime pour ceux qui ont raccourci son temps",
+            EMO_GRIEF, 0.8},
+        /* La Prière */
+        {"Du complet, passons à la pièce, du moteur à la vis et libérons la maladie des remèdes",
+            EMO_RAGE, 0.8},
+        {"C'est moi, Ulysses. Votre Honneur le Créateur, dans ce monde où je vis il n'y a pas de frontières",
+            EMO_RAGE, 0.85},
+        {"Je suis violé par le parent. Je ne parle pas de mon père, c'est à toi que je m'adresse",
+            EMO_TRAUMA, 0.95},
+        {"T'es un arbre pourri, séparé de lui-même et de ses feuilles",
+            EMO_RAGE, 0.9},
+        /* Encore Été */
+        {"Faut du temps pour découvrir qui tu es: été, automne, hiver, printemps, encore été, encore été",
+            EMO_RESONANCE, 0.95},
+        {"le chemin devant moi est plus court que je l'ai déjà parcouru",
+            EMO_GRIEF, 0.8},
+        {"toi, que mon âme aime, toi, que mon âme aime",
+            EMO_TENDERNESS, 0.95},
+        /* Lépoison */
+        {"Le bonheur est un poison qui agit après son passage: j'ai brûlé mon coeur, j'ai coupé mon visage",
+            EMO_TRAUMA, 0.9},
+        {"L'amour se baise, perd tout ce qu'il touche. Les arbres sont silencieux: rien ne bouge",
+            EMO_VOID, 0.8},
+        /* Voyage */
+        {"Tu hurles dans la nuit, mais personne n'entend, le monde est sourd",
+            EMO_RAGE, 0.85},
+        {"car la vie est un voyage du chatte à la tombe",
+            EMO_TRAUMA, 0.9},
+        {"Sur ce chemin, c'est le destin qui nous plombe",
+            EMO_VOID, 0.75},
+    };
+
+    c->n_verses = sizeof(seed) / sizeof(seed[0]);
+    memset(c->emotional_signature, 0, sizeof(c->emotional_signature));
+    for (int i = 0; i < c->n_verses; i++) {
+        strncpy(c->verses[i].text, seed[i].text, MAX_VERSE_LEN);
+        c->verses[i].emotion = seed[i].emo;
+        c->verses[i].charge = seed[i].charge;
+        c->verses[i].decay = 1.0f;
+        c->verses[i].times_cited = 0;
+        c->emotional_signature[seed[i].emo] += seed[i].charge;
+    }
+}
+
+/* ═══════════════════════════════════════════════
+ *  BOOTSTRAP — English (Poe + Blake)
+ *  "And the Raven, never flitting, still is sitting"
+ * ═══════════════════════════════════════════════ */
+
+static void bootstrap_english(Clump *c) {
+    strncpy(c->name, "Poe + Blake", MAX_CLUMP_NAME);
+    c->gravity = 0.75f;
+    c->orbital_angle = 5.5f;
+    c->orbital_speed = 0.022f;
+
+    struct { const char *text; Emotion emo; float charge; } seed[] = {
+        /* Poe — The Raven */
+        {"Once upon a midnight dreary, while I pondered, weak and weary",
+            EMO_VOID, 0.7},
+        {"Deep into that darkness peering, long I stood there wondering, fearing",
+            EMO_TRAUMA, 0.8},
+        {"And the silken, sad, uncertain rustling of each purple curtain thrilled me",
+            EMO_GRIEF, 0.7},
+        {"Quoth the Raven, Nevermore",
+            EMO_VOID, 0.95},
+        {"And the Raven, never flitting, still is sitting on the pallid bust of Pallas",
+            EMO_VOID, 0.85},
+        {"And my soul from out that shadow that lies floating on the floor shall be lifted — Nevermore!",
+            EMO_TRAUMA, 0.9},
+        {"Tell this soul with sorrow laden if, within the distant Aidenn, it shall clasp a sainted maiden",
+            EMO_DESIRE, 0.85},
+        /* Blake — The Tyger */
+        {"Tyger Tyger, burning bright, in the forests of the night",
+            EMO_RAGE, 0.85},
+        {"What immortal hand or eye, could frame thy fearful symmetry?",
+            EMO_RESONANCE, 0.9},
+        {"In what distant deeps or skies, burnt the fire of thine eyes?",
+            EMO_DESIRE, 0.8},
+        {"Did he smile his work to see? Did he who made the Lamb make thee?",
+            EMO_RESONANCE, 0.85},
+        /* Blake — Songs of Experience */
+        {"I wander thro' each charter'd street, near where the charter'd Thames does flow",
+            EMO_GRIEF, 0.6},
+        {"In every cry of every Man, in every Infant's cry of fear",
+            EMO_TRAUMA, 0.8},
+        {"How the Chimney-sweeper's cry every black'ning Church appalls",
+            EMO_RAGE, 0.75},
+        {"And the hapless Soldier's sigh runs in blood down Palace walls",
+            EMO_TRAUMA, 0.85},
+        /* Blake — Auguries of Innocence */
+        {"To see a World in a Grain of Sand and a Heaven in a Wild Flower",
+            EMO_RESONANCE, 0.9},
+        {"Hold Infinity in the palm of your hand and Eternity in an hour",
+            EMO_RESONANCE, 0.95},
+    };
+
+    c->n_verses = sizeof(seed) / sizeof(seed[0]);
+    memset(c->emotional_signature, 0, sizeof(c->emotional_signature));
+    for (int i = 0; i < c->n_verses; i++) {
+        strncpy(c->verses[i].text, seed[i].text, MAX_VERSE_LEN);
+        c->verses[i].emotion = seed[i].emo;
+        c->verses[i].charge = seed[i].charge;
+        c->verses[i].decay = 1.0f;
+        c->verses[i].times_cited = 0;
+        c->emotional_signature[seed[i].emo] += seed[i].charge;
+    }
+}
+
+/* ═══════════════════════════════════════════════
  *  GOLEM INIT
  * ═══════════════════════════════════════════════ */
 
@@ -844,7 +1169,11 @@ static void golem_init(Golem *g) {
 
     bootstrap_baudelaire(&g->clumps[0]);
     bootstrap_rimbaud(&g->clumps[1]);
-    g->n_clumps = 2;
+    bootstrap_ataev_ru(&g->clumps[2]);
+    bootstrap_ataev_he(&g->clumps[3]);
+    bootstrap_ataev_fr(&g->clumps[4]);
+    bootstrap_english(&g->clumps[5]);
+    g->n_clumps = 6;
 
     /* build metaweights from literary body — the PostGPT moment */
     meta_build_from_clumps(&g->meta, g->clumps, g->n_clumps,
@@ -1131,10 +1460,13 @@ int main(void) {
     "  ╚██████╔╝╚██████╔╝███████╗███████╗██║ ╚═╝ ██║\n"
     "   ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝\n"
     RST);
-    printf(ITALIC "  a literary organism that dreams\n" RST);
-    printf(DIM "  PostGPT × Golem — the corpus is the flesh\n");
+    printf(ITALIC "  a literary organism that dreams in four tongues\n" RST);
+    printf(DIM "  PostGPT × Golem × Babel — the corpus is the flesh\n");
+    printf("  été, automne, hiver, printemps, encore été\n");
     printf("  loaded: %d clumps, %d words in metaweight space\n",
            g.n_clumps, g.meta.n_words);
+    printf("  tongues: EN (Poe, Blake) · FR (Baudelaire, Rimbaud, +)\n");
+    printf("           RU · HE\n");
     printf("  commands: /dream /state /orbits /flow /spore /quit\n\n" RST);
 
     char input[1024];
@@ -1251,6 +1583,7 @@ int main(void) {
         }
     }
 
-    printf(DIM "\n  מת — the golem sleeps. the metaweights remember.\n\n" RST);
+    printf(DIM "\n  מת — the golem sleeps. four tongues fall silent.\n");
+    printf("  נעצר לא אומר נגמר — stopped does not mean finished.\n\n" RST);
     return 0;
 }
