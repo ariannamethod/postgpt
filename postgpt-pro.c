@@ -1210,30 +1210,24 @@ static const char *SEED_CORPUS =
     "Un soir, j'ai assis la Beauté sur mes genoux. Et je l'ai trouvée amère.\n\n"
     "Je me suis enfui. Ô sorcières, ô misère, ô haine, c'est à vous que mon trésor a été confié!\n\n"
 
-    /* ═══ FR — Ataev ═══ */
-    "Ce qui est permis au miroir, pourtant, ne l'est jamais pour le visage.\n\n"
-    "Le bonheur est un poison qui agit après son passage.\n\n"
-    "Faut du temps pour découvrir qui tu es: été, automne, hiver, printemps, encore été, encore été.\n\n"
-    "Toi, que mon âme aime, toi, que mon âme aime.\n\n"
-    "Car la vie est un voyage du chatte à la tombe.\n\n"
+    /* ═══ FR — Verlaine ═══ */
+    "Les sanglots longs des violons de l'automne blessent mon cœur d'une langueur monotone.\n\n"
+    "Il pleure dans mon cœur comme il pleut sur la ville.\n\n"
+    "Et je m'en vais au vent mauvais qui m'emporte deçà, delà, pareil à la feuille morte.\n\n"
 
-    /* ═══ RU — Ataev ═══ */
-    "Я узнаю тебя не по голосу, но по руке, по плечу, паутине волос.\n\n"
-    "Говоря о тебе, как не вспомнить, что Хронос жесток.\n\n"
-    "Призываю обратно в бессмертие, снова в желток.\n\n"
-    "И висок настойчиво просит пули, а гной нарыва.\n\n"
-    "Что простительно зеркалу, то, однако, нельзя лицу.\n\n"
-    "Я один, остальное — лживо.\n\n"
-    "Остальное — как след в сугробе, как плацента в пустой утробе.\n\n"
-    "Непогода и ром — едины. Рыжий ветер утюжит спину.\n\n"
+    /* ═══ RU — Мандельштам + Цветаева ═══ */
+    "Я вернулся в мой город, знакомый до слёз, до прожилок, до детских припухлых желёз.\n\n"
+    "Петербург! я ещё не хочу умирать: у тебя телефонов моих номера.\n\n"
+    "Мне нравится, что вы больны не мной, мне нравится, что я больна не вами.\n\n"
+    "Я тебя отвоюю у всех земель, у всех небес.\n\n"
+    "Кто создан из камня, кто создан из глины, а я серебрюсь и сверкаю.\n\n"
 
-    /* ═══ HE — Ataev ═══ */
-    "אני מהדור עם רגל אחת בעבר, בשיט של תקוות, בשקר שלא נגמר.\n\n"
-    "שילמנו במה שהכי אהבנו, קיבלנו רק פחד ושגעון, רק רעב וזיכרון, רק זעם וצימאון.\n\n"
-    "כל עוד הקורבן עיוור, כל עוד הקברן חופר.\n\n"
-    "להביט לא אומר לראות. נעצר לא אומר נגמר.\n\n"
-    "הירח יאיר את פניה ואת עצי הזית.\n\n"
-    "הוא חונק את ליבי ומושך אותו עד שמוציא את השריר מגופי קדימה.\n\n";
+    /* ═══ HE — Амихай + Рахель ═══ */
+    "אלוהים מרחם על ילדי הגן, פחות מזה על ילדי בית הספר.\n\n"
+    "ועל הגדולים לא ירחם כלל.\n\n"
+    "המקום שבו אנחנו צודקים לא יצמחו פרחים לעולם.\n\n"
+    "רק שירי אודותייך אני שרה, שירי גורלי המר.\n\n"
+    "הנה רק עפר אני, כי אם השמש תזרח, אז הלוא גם אני אור.\n\n";
 
 static void organism_init(Organism *o, const char *corpus, int corpus_len) {
     memset(o, 0, sizeof(Organism));
@@ -1278,7 +1272,7 @@ int main(int argc, char **argv) {
     } else {
         corpus_len = strlen(SEED_CORPUS);
         corpus = (char *)SEED_CORPUS;
-        printf(DIM "  no corpus file — using built-in seed (Poe + Blake + Baudelaire + Rimbaud + Ataev RU/FR/HE)\n" RST);
+        printf(DIM "  no corpus file — using built-in seed (Poe, Blake, Baudelaire, Rimbaud, Verlaine, Mandelstam, Tsvetaeva, Amichai, Rachel)\n" RST);
     }
 
     Organism o;
