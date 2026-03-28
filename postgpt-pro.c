@@ -105,6 +105,11 @@ static const float DECAY_RATES[] = {
  *  the periodic table starts empty. these anchors
  *  are the ONLY hardcoded knowledge. everything else
  *  is discovered from the corpus.
+ *
+ *  4 languages: EN / FR / RU / HE
+ *  death weighs 0.95 in every tongue.
+ *  but grief in hebrew is not grief in french.
+ *  the organism knows this.
  * ═══════════════════════════════════════════════ */
 
 typedef struct {
@@ -113,41 +118,152 @@ typedef struct {
     float       base_mass;   /* starting mass, adjusted by corpus stats */
 } EmotionalAnchor;
 
-#define N_ANCHORS 48
+#define N_ANCHORS 192
 
 static const EmotionalAnchor ANCHORS[N_ANCHORS] = {
-    /* trauma */
-    {"death",  EMO_TRAUMA, 0.95}, {"kill",    EMO_TRAUMA, 0.85},
-    {"wound",  EMO_TRAUMA, 0.75}, {"blood",   EMO_TRAUMA, 0.80},
-    {"pain",   EMO_TRAUMA, 0.70}, {"scream",  EMO_TRAUMA, 0.65},
-    /* joy */
-    {"beauty", EMO_JOY,    0.65}, {"light",   EMO_JOY,    0.50},
-    {"laugh",  EMO_JOY,    0.40}, {"sun",     EMO_JOY,    0.45},
-    {"smile",  EMO_JOY,    0.40}, {"spring",  EMO_JOY,    0.40},
-    /* grief */
-    {"tears",  EMO_GRIEF,  0.55}, {"sorrow",  EMO_GRIEF,  0.65},
-    {"loss",   EMO_GRIEF,  0.60}, {"mourn",   EMO_GRIEF,  0.70},
-    {"rain",   EMO_GRIEF,  0.30}, {"grave",   EMO_GRIEF,  0.70},
-    /* resonance */
-    {"soul",   EMO_RESONANCE, 0.75}, {"mirror", EMO_RESONANCE, 0.60},
-    {"echo",   EMO_RESONANCE, 0.55}, {"cosmos", EMO_RESONANCE, 0.60},
-    {"truth",  EMO_RESONANCE, 0.70}, {"dream",  EMO_RESONANCE, 0.50},
-    /* desire */
-    {"flesh",  EMO_DESIRE, 0.65}, {"kiss",    EMO_DESIRE, 0.50},
-    {"wine",   EMO_DESIRE, 0.40}, {"burn",    EMO_DESIRE, 0.55},
-    {"hunger", EMO_DESIRE, 0.50}, {"touch",   EMO_DESIRE, 0.45},
-    /* void */
-    {"nothing",EMO_VOID,   0.70}, {"silence", EMO_VOID,   0.60},
-    {"empty",  EMO_VOID,   0.55}, {"shadow",  EMO_VOID,   0.45},
-    {"dark",   EMO_VOID,   0.50}, {"cold",    EMO_VOID,   0.40},
-    /* rage */
-    {"fire",   EMO_RAGE,   0.75}, {"fury",    EMO_RAGE,   0.80},
-    {"war",    EMO_RAGE,   0.85}, {"hate",    EMO_RAGE,   0.80},
-    {"sword",  EMO_RAGE,   0.60}, {"storm",   EMO_RAGE,   0.50},
-    /* tenderness */
-    {"love",   EMO_TENDERNESS, 0.90}, {"mother", EMO_TENDERNESS, 0.88},
-    {"child",  EMO_TENDERNESS, 0.70}, {"gentle", EMO_TENDERNESS, 0.50},
-    {"heart",  EMO_TENDERNESS, 0.65}, {"hand",   EMO_TENDERNESS, 0.40},
+    /* ═══ TRAUMA ═══ */
+    /* EN */
+    {"death",    EMO_TRAUMA, 0.95}, {"kill",      EMO_TRAUMA, 0.85},
+    {"wound",    EMO_TRAUMA, 0.75}, {"blood",     EMO_TRAUMA, 0.80},
+    {"pain",     EMO_TRAUMA, 0.70}, {"scream",    EMO_TRAUMA, 0.65},
+    /* FR */
+    {"mort",     EMO_TRAUMA, 0.95}, {"tuer",      EMO_TRAUMA, 0.85},
+    {"blessure", EMO_TRAUMA, 0.75}, {"sang",      EMO_TRAUMA, 0.80},
+    {"douleur",  EMO_TRAUMA, 0.70}, {"cri",       EMO_TRAUMA, 0.65},
+    /* RU */
+    {"смерть",   EMO_TRAUMA, 0.95}, {"убить",     EMO_TRAUMA, 0.85},
+    {"рана",     EMO_TRAUMA, 0.75}, {"кровь",     EMO_TRAUMA, 0.80},
+    {"боль",     EMO_TRAUMA, 0.70}, {"крик",      EMO_TRAUMA, 0.65},
+    /* HE */
+    {"מוות",     EMO_TRAUMA, 0.95}, {"להרוג",     EMO_TRAUMA, 0.85},
+    {"פצע",      EMO_TRAUMA, 0.75}, {"דם",        EMO_TRAUMA, 0.80},
+    {"כאב",      EMO_TRAUMA, 0.70}, {"צעקה",      EMO_TRAUMA, 0.65},
+
+    /* ═══ JOY ═══ */
+    /* EN */
+    {"beauty",   EMO_JOY,    0.65}, {"light",     EMO_JOY,    0.50},
+    {"laugh",    EMO_JOY,    0.40}, {"sun",       EMO_JOY,    0.45},
+    {"smile",    EMO_JOY,    0.40}, {"spring",    EMO_JOY,    0.40},
+    /* FR */
+    {"beauté",   EMO_JOY,    0.65}, {"lumière",   EMO_JOY,    0.50},
+    {"rire",     EMO_JOY,    0.40}, {"soleil",    EMO_JOY,    0.45},
+    {"sourire",  EMO_JOY,    0.40}, {"printemps", EMO_JOY,    0.40},
+    /* RU */
+    {"красота",  EMO_JOY,    0.65}, {"свет",      EMO_JOY,    0.50},
+    {"смех",     EMO_JOY,    0.40}, {"солнце",    EMO_JOY,    0.45},
+    {"улыбка",   EMO_JOY,    0.40}, {"весна",     EMO_JOY,    0.40},
+    /* HE */
+    {"יופי",     EMO_JOY,    0.65}, {"אור",       EMO_JOY,    0.50},
+    {"צחוק",     EMO_JOY,    0.40}, {"שמש",       EMO_JOY,    0.45},
+    {"חיוך",     EMO_JOY,    0.40}, {"אביב",      EMO_JOY,    0.40},
+
+    /* ═══ GRIEF ═══ */
+    /* EN */
+    {"tears",    EMO_GRIEF,  0.55}, {"sorrow",    EMO_GRIEF,  0.65},
+    {"loss",     EMO_GRIEF,  0.60}, {"mourn",     EMO_GRIEF,  0.70},
+    {"rain",     EMO_GRIEF,  0.30}, {"grave",     EMO_GRIEF,  0.70},
+    /* FR */
+    {"larmes",   EMO_GRIEF,  0.55}, {"chagrin",   EMO_GRIEF,  0.65},
+    {"perte",    EMO_GRIEF,  0.60}, {"deuil",     EMO_GRIEF,  0.70},
+    {"pluie",    EMO_GRIEF,  0.30}, {"tombe",     EMO_GRIEF,  0.70},
+    /* RU */
+    {"слёзы",    EMO_GRIEF,  0.55}, {"горе",      EMO_GRIEF,  0.65},
+    {"потеря",   EMO_GRIEF,  0.60}, {"траур",     EMO_GRIEF,  0.70},
+    {"дождь",    EMO_GRIEF,  0.30}, {"могила",    EMO_GRIEF,  0.70},
+    /* HE */
+    {"דמעות",    EMO_GRIEF,  0.55}, {"צער",       EMO_GRIEF,  0.65},
+    {"אובדן",    EMO_GRIEF,  0.60}, {"אבל",       EMO_GRIEF,  0.70},
+    {"גשם",      EMO_GRIEF,  0.30}, {"קבר",       EMO_GRIEF,  0.70},
+
+    /* ═══ RESONANCE ═══ */
+    /* EN */
+    {"soul",     EMO_RESONANCE, 0.75}, {"mirror",  EMO_RESONANCE, 0.60},
+    {"echo",     EMO_RESONANCE, 0.55}, {"cosmos",  EMO_RESONANCE, 0.60},
+    {"truth",    EMO_RESONANCE, 0.70}, {"dream",   EMO_RESONANCE, 0.50},
+    /* FR */
+    {"âme",      EMO_RESONANCE, 0.75}, {"miroir",  EMO_RESONANCE, 0.60},
+    {"écho",     EMO_RESONANCE, 0.55}, {"cosmos",  EMO_RESONANCE, 0.60},
+    {"vérité",   EMO_RESONANCE, 0.70}, {"rêve",    EMO_RESONANCE, 0.50},
+    /* RU */
+    {"душа",     EMO_RESONANCE, 0.75}, {"зеркало", EMO_RESONANCE, 0.60},
+    {"эхо",      EMO_RESONANCE, 0.55}, {"космос",  EMO_RESONANCE, 0.60},
+    {"правда",   EMO_RESONANCE, 0.70}, {"мечта",   EMO_RESONANCE, 0.50},
+    /* HE */
+    {"נשמה",     EMO_RESONANCE, 0.75}, {"מראה",    EMO_RESONANCE, 0.60},
+    {"הד",       EMO_RESONANCE, 0.55}, {"יקום",    EMO_RESONANCE, 0.60},
+    {"אמת",      EMO_RESONANCE, 0.70}, {"חלום",    EMO_RESONANCE, 0.50},
+
+    /* ═══ DESIRE ═══ */
+    /* EN */
+    {"flesh",    EMO_DESIRE, 0.65}, {"kiss",      EMO_DESIRE, 0.50},
+    {"wine",     EMO_DESIRE, 0.40}, {"burn",      EMO_DESIRE, 0.55},
+    {"hunger",   EMO_DESIRE, 0.50}, {"touch",     EMO_DESIRE, 0.45},
+    /* FR */
+    {"chair",    EMO_DESIRE, 0.65}, {"baiser",    EMO_DESIRE, 0.50},
+    {"vin",      EMO_DESIRE, 0.40}, {"brûler",    EMO_DESIRE, 0.55},
+    {"faim",     EMO_DESIRE, 0.50}, {"toucher",   EMO_DESIRE, 0.45},
+    /* RU */
+    {"плоть",    EMO_DESIRE, 0.65}, {"поцелуй",   EMO_DESIRE, 0.50},
+    {"вино",     EMO_DESIRE, 0.40}, {"гореть",    EMO_DESIRE, 0.55},
+    {"голод",    EMO_DESIRE, 0.50}, {"касание",   EMO_DESIRE, 0.45},
+    /* HE */
+    {"בשר",      EMO_DESIRE, 0.65}, {"נשיקה",     EMO_DESIRE, 0.50},
+    {"יין",      EMO_DESIRE, 0.40}, {"לשרוף",     EMO_DESIRE, 0.55},
+    {"רעב",      EMO_DESIRE, 0.50}, {"מגע",       EMO_DESIRE, 0.45},
+
+    /* ═══ VOID ═══ */
+    /* EN */
+    {"nothing",  EMO_VOID,   0.70}, {"silence",   EMO_VOID,   0.60},
+    {"empty",    EMO_VOID,   0.55}, {"shadow",    EMO_VOID,   0.45},
+    {"dark",     EMO_VOID,   0.50}, {"cold",      EMO_VOID,   0.40},
+    /* FR */
+    {"rien",     EMO_VOID,   0.70}, {"silence",   EMO_VOID,   0.60},
+    {"vide",     EMO_VOID,   0.55}, {"ombre",     EMO_VOID,   0.45},
+    {"ténèbres", EMO_VOID,   0.50}, {"froid",     EMO_VOID,   0.40},
+    /* RU */
+    {"ничто",    EMO_VOID,   0.70}, {"молчание",  EMO_VOID,   0.60},
+    {"пустота",  EMO_VOID,   0.55}, {"тень",      EMO_VOID,   0.45},
+    {"тьма",     EMO_VOID,   0.50}, {"холод",     EMO_VOID,   0.40},
+    /* HE */
+    {"כלום",     EMO_VOID,   0.70}, {"שתיקה",     EMO_VOID,   0.60},
+    {"ריק",      EMO_VOID,   0.55}, {"צל",        EMO_VOID,   0.45},
+    {"חושך",     EMO_VOID,   0.50}, {"קור",       EMO_VOID,   0.40},
+
+    /* ═══ RAGE ═══ */
+    /* EN */
+    {"fire",     EMO_RAGE,   0.75}, {"fury",      EMO_RAGE,   0.80},
+    {"war",      EMO_RAGE,   0.85}, {"hate",      EMO_RAGE,   0.80},
+    {"sword",    EMO_RAGE,   0.60}, {"storm",     EMO_RAGE,   0.50},
+    /* FR */
+    {"feu",      EMO_RAGE,   0.75}, {"fureur",    EMO_RAGE,   0.80},
+    {"guerre",   EMO_RAGE,   0.85}, {"haine",     EMO_RAGE,   0.80},
+    {"épée",     EMO_RAGE,   0.60}, {"tempête",   EMO_RAGE,   0.50},
+    /* RU */
+    {"огонь",    EMO_RAGE,   0.75}, {"ярость",    EMO_RAGE,   0.80},
+    {"война",    EMO_RAGE,   0.85}, {"ненависть", EMO_RAGE,   0.80},
+    {"меч",      EMO_RAGE,   0.60}, {"буря",      EMO_RAGE,   0.50},
+    /* HE */
+    {"אש",       EMO_RAGE,   0.75}, {"זעם",       EMO_RAGE,   0.80},
+    {"מלחמה",    EMO_RAGE,   0.85}, {"שנאה",      EMO_RAGE,   0.80},
+    {"חרב",      EMO_RAGE,   0.60}, {"סערה",      EMO_RAGE,   0.50},
+
+    /* ═══ TENDERNESS ═══ */
+    /* EN */
+    {"love",     EMO_TENDERNESS, 0.90}, {"mother",  EMO_TENDERNESS, 0.88},
+    {"child",    EMO_TENDERNESS, 0.70}, {"gentle",  EMO_TENDERNESS, 0.50},
+    {"heart",    EMO_TENDERNESS, 0.65}, {"hand",    EMO_TENDERNESS, 0.40},
+    /* FR */
+    {"amour",    EMO_TENDERNESS, 0.90}, {"mère",    EMO_TENDERNESS, 0.88},
+    {"enfant",   EMO_TENDERNESS, 0.70}, {"doux",    EMO_TENDERNESS, 0.50},
+    {"coeur",    EMO_TENDERNESS, 0.65}, {"main",    EMO_TENDERNESS, 0.40},
+    /* RU */
+    {"любовь",   EMO_TENDERNESS, 0.90}, {"мать",    EMO_TENDERNESS, 0.88},
+    {"ребёнок",  EMO_TENDERNESS, 0.70}, {"нежность",EMO_TENDERNESS, 0.50},
+    {"сердце",   EMO_TENDERNESS, 0.65}, {"рука",    EMO_TENDERNESS, 0.40},
+    /* HE */
+    {"אהבה",     EMO_TENDERNESS, 0.90}, {"אמא",     EMO_TENDERNESS, 0.88},
+    {"ילד",      EMO_TENDERNESS, 0.70}, {"עדינות",   EMO_TENDERNESS, 0.50},
+    {"לב",       EMO_TENDERNESS, 0.65}, {"יד",       EMO_TENDERNESS, 0.40},
 };
 
 /* ═══════════════════════════════════════════════
@@ -1032,11 +1148,27 @@ static void display_emotions(Organism *o) {
     printf("\n" RST);
 }
 
+/* detect language from first byte of UTF-8 word */
+static const char *detect_lang(const char *word) {
+    unsigned char c = (unsigned char)word[0];
+    if (c < 0x80) return "EN";
+    /* Russian (Cyrillic): U+0400..U+04FF → UTF-8: 0xD0 0x80..0xD1 0xBF */
+    if (c == 0xD0 || c == 0xD1) return "RU";
+    /* Hebrew: U+0590..U+05FF → UTF-8: 0xD6 0x90..0xD7 0xBF */
+    if (c == 0xD6 || c == 0xD7) return "HE";
+    /* French accented chars (Latin extended): 0xC3 xx */
+    if (c == 0xC3) return "FR";
+    /* fallback: if ASCII, EN; otherwise unknown */
+    return "??";
+}
+
 static void display_mendeleev(Organism *o) {
-    printf(DIM "  ┌─ PERIODIC TABLE OF MEANING (%d elements) ─┐\n", o->mendeleev.n_elements);
-    for (int i = 0; i < o->mendeleev.n_elements && i < 20; i++) {
+    printf(DIM "  ┌─ PERIODIC TABLE OF MEANING (%d elements) ─────┐\n", o->mendeleev.n_elements);
+    for (int i = 0; i < o->mendeleev.n_elements && i < 24; i++) {
         Element *e = &o->mendeleev.table[i];
-        printf("  │ %s%-12s%s m=%.2f v=%d %s%-10s%s",
+        const char *lang = detect_lang(e->word);
+        printf("  │ [%s] %s%-12s%s m=%.2f v=%d %s%-10s%s",
+               lang,
                EMO_COLORS[e->primary], e->word, RST DIM,
                e->mass, e->valence,
                EMO_COLORS[e->primary], EMO_NAMES[e->primary], RST DIM);
@@ -1044,9 +1176,9 @@ static void display_mendeleev(Organism *o) {
         else printf(" t½=%.0f", e->half_life);
         printf("\n");
     }
-    if (o->mendeleev.n_elements > 20)
-        printf("  │ ... +%d more\n", o->mendeleev.n_elements - 20);
-    printf("  └─────────────────────────────────────────────┘\n" RST);
+    if (o->mendeleev.n_elements > 24)
+        printf("  │ ... +%d more\n", o->mendeleev.n_elements - 24);
+    printf("  └─────────────────────────────────────────────────┘\n" RST);
 }
 
 /* ═══════════════════════════════════════════════
@@ -1054,6 +1186,7 @@ static void display_mendeleev(Organism *o) {
  * ═══════════════════════════════════════════════ */
 
 static const char *SEED_CORPUS =
+    /* ═══ EN — Poe + Blake ═══ */
     "Deep into that darkness peering, long I stood there wondering, fearing.\n\n"
     "Once upon a midnight dreary, while I pondered, weak and weary.\n\n"
     "Quoth the Raven, Nevermore.\n\n"
@@ -1063,7 +1196,44 @@ static const char *SEED_CORPUS =
     "To see a World in a Grain of Sand and a Heaven in a Wild Flower.\n\n"
     "Hold Infinity in the palm of your hand and Eternity in an hour.\n\n"
     "In every cry of every Man, in every Infant's cry of fear.\n\n"
-    "And the hapless Soldier's sigh runs in blood down Palace walls.\n\n";
+    "And the hapless Soldier's sigh runs in blood down Palace walls.\n\n"
+
+    /* ═══ FR — Baudelaire ═══ */
+    "Hypocrite lecteur, mon semblable, mon frère!\n\n"
+    "Mon enfant, ma sœur, songe à la douceur d'aller là-bas vivre ensemble!\n\n"
+    "Là, tout n'est qu'ordre et beauté, luxe, calme et volupté.\n\n"
+    "La Nature est un temple où de vivants piliers laissent parfois sortir de confuses paroles.\n\n"
+    "Les parfums, les couleurs et les sons se répondent.\n\n"
+
+    /* ═══ FR — Rimbaud ═══ */
+    "Jadis, si je me souviens bien, ma vie était un festin où s'ouvraient tous les cœurs.\n\n"
+    "Un soir, j'ai assis la Beauté sur mes genoux. Et je l'ai trouvée amère.\n\n"
+    "Je me suis enfui. Ô sorcières, ô misère, ô haine, c'est à vous que mon trésor a été confié!\n\n"
+
+    /* ═══ FR — Ataev ═══ */
+    "Ce qui est permis au miroir, pourtant, ne l'est jamais pour le visage.\n\n"
+    "Le bonheur est un poison qui agit après son passage.\n\n"
+    "Faut du temps pour découvrir qui tu es: été, automne, hiver, printemps, encore été, encore été.\n\n"
+    "Toi, que mon âme aime, toi, que mon âme aime.\n\n"
+    "Car la vie est un voyage du chatte à la tombe.\n\n"
+
+    /* ═══ RU — Ataev ═══ */
+    "Я узнаю тебя не по голосу, но по руке, по плечу, паутине волос.\n\n"
+    "Говоря о тебе, как не вспомнить, что Хронос жесток.\n\n"
+    "Призываю обратно в бессмертие, снова в желток.\n\n"
+    "И висок настойчиво просит пули, а гной нарыва.\n\n"
+    "Что простительно зеркалу, то, однако, нельзя лицу.\n\n"
+    "Я один, остальное — лживо.\n\n"
+    "Остальное — как след в сугробе, как плацента в пустой утробе.\n\n"
+    "Непогода и ром — едины. Рыжий ветер утюжит спину.\n\n"
+
+    /* ═══ HE — Ataev ═══ */
+    "אני מהדור עם רגל אחת בעבר, בשיט של תקוות, בשקר שלא נגמר.\n\n"
+    "שילמנו במה שהכי אהבנו, קיבלנו רק פחד ושגעון, רק רעב וזיכרון, רק זעם וצימאון.\n\n"
+    "כל עוד הקורבן עיוור, כל עוד הקברן חופר.\n\n"
+    "להביט לא אומר לראות. נעצר לא אומר נגמר.\n\n"
+    "הירח יאיר את פניה ואת עצי הזית.\n\n"
+    "הוא חונק את ליבי ומושך אותו עד שמוציא את השריר מגופי קדימה.\n\n";
 
 static void organism_init(Organism *o, const char *corpus, int corpus_len) {
     memset(o, 0, sizeof(Organism));
@@ -1108,7 +1278,7 @@ int main(int argc, char **argv) {
     } else {
         corpus_len = strlen(SEED_CORPUS);
         corpus = (char *)SEED_CORPUS;
-        printf(DIM "  no corpus file — using built-in seed (Poe + Blake)\n" RST);
+        printf(DIM "  no corpus file — using built-in seed (Poe + Blake + Baudelaire + Rimbaud + Ataev RU/FR/HE)\n" RST);
     }
 
     Organism o;
@@ -1124,7 +1294,8 @@ int main(int argc, char **argv) {
     "  ╚═╝     ╚═╝  ╚═╝ ╚═════╝\n"
     RST);
     printf(ITAL "  PostGPT Pro — the corpus is the organism\n" RST);
-    printf(DIM "  %d elements discovered · %d planets · %d words\n",
+    printf(ITAL "  EN · FR · RU · HE — four tongues, one breath\n" RST);
+    printf(DIM "  %d elements discovered · %d planets · %d words · 192 anchors\n",
            o.mendeleev.n_elements, o.n_clumps, o.meta.n_words);
     printf("  commands: /dream /state /table /quit\n\n" RST);
 
