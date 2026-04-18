@@ -19,6 +19,21 @@
 #include <time.h>
 #include <float.h>
 
+/* ───────────────────────── Sigmoid Gate ───────────────────────── */
+
+static float sigmoid_gate(float x) { return 1.0f / (1.0f + expf(-x)); }
+
+/*
+ * learned_gate: trainable parameter controlling interpolation
+ * between transformer logits and metaweight logits.
+ * Initialized to 0.0 so sigmoid(0) = 0.5 = equal blend.
+ * Per paper Appendix E.4 (DOI 10.5281/zenodo.19638451).
+ *
+ * final_logits[i] = gate * transformer_logits[i] + (1 - gate) * metaweight_logits[i]
+ * where gate = sigmoid_gate(learned_gate)
+ */
+static float learned_gate = 0.0f;
+
 /* ───────────────────────── Configuration ───────────────────────── */
 
 #define MAX_MERGES     1792
@@ -844,6 +859,7 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
     float *hebbian_sig = (float *)malloc(vocab_size * sizeof(float));
     float *prophecy_sig = (float *)malloc(vocab_size * sizeof(float));
     float *destiny_sig = (float *)malloc(vocab_size * sizeof(float));
+    float *metaweight_logits = (float *)malloc(vocab_size * sizeof(float));
 
     /* Dario field coefficients */
     float alpha_hebbian = 0.3f;
@@ -919,13 +935,21 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
             }
         }
 
-        /* Combine: full Dario Equation */
+
+        /* Sigmoid-gated interpolation (paper Appendix E.4) */
+        /* Build metaweight logit vector from all Dario field signals */
         for (int i = 0; i < vocab_size; i++) {
-            logits[i] += alpha_hebbian * hebbian_sig[i]
-                       + beta_prophecy * prophecy_sig[i]
-                       + gamma_destiny * destiny_sig[i]
-                       + 12.0f * bigram_dist[i]
-                       + 8.0f * trigram_dist[i];
+            metaweight_logits[i] = alpha_hebbian * hebbian_sig[i]
+                                 + beta_prophecy * prophecy_sig[i]
+                                 + gamma_destiny * destiny_sig[i]
+                                 + 12.0f * bigram_dist[i]
+                                 + 8.0f * trigram_dist[i];
+        }
+
+        /* Interpolate: gate * transformer + (1 - gate) * metaweights */
+        float gate = sigmoid_gate(learned_gate);
+        for (int i = 0; i < vocab_size; i++) {
+            logits[i] = gate * logits[i] + (1.0f - gate) * metaweight_logits[i];
         }
 
         /* Trauma modulation */
@@ -982,17 +1006,107 @@ static void generate_full(const int *prompt, int prompt_len, int max_tokens,
     free(hebbian_sig);
     free(prophecy_sig);
     free(destiny_sig);
+    free(metaweight_logits);
 
     bpe_decode(generated, gen_len, out, max_out);
 }
 
 /* ───────────────────────── Main ───────────────────────── */
 
+
+/* ───────────────────────── Tests: Sigmoid Gate ───────────────────────── */
+
+static int test_sigmoid_gate(void) {
+    int passed = 0, failed = 0;
+    float eps = 1e-5f;
+
+    /* Test 1: gate=0 (learned_gate=0) gives equal blend (0.5/0.5) */
+    {
+        float g = sigmoid_gate(0.0f);
+        if (fabsf(g - 0.5f) < eps) passed++; else { printf("  FAIL: sigmoid(0) = %f, expected 0.5\n", g); failed++; }
+    }
+
+    /* Test 2: large positive learned_gate -> gate ~1.0 -> transformer-only */
+    {
+        float g = sigmoid_gate(10.0f);
+        float transformer_logit = 5.0f, meta_logit = -3.0f;
+        float result = g * transformer_logit + (1.0f - g) * meta_logit;
+        /* With gate ~1.0, result should be very close to transformer_logit */
+        if (fabsf(result - transformer_logit) < 0.01f) passed++;
+        else { printf("  FAIL: gate=large positive, result=%f, expected ~%f\n", result, transformer_logit); failed++; }
+    }
+
+    /* Test 3: large negative learned_gate -> gate ~0.0 -> metaweights-only */
+    {
+        float g = sigmoid_gate(-10.0f);
+        float transformer_logit = 5.0f, meta_logit = -3.0f;
+        float result = g * transformer_logit + (1.0f - g) * meta_logit;
+        /* With gate ~0.0, result should be very close to meta_logit */
+        if (fabsf(result - meta_logit) < 0.01f) passed++;
+        else { printf("  FAIL: gate=large negative, result=%f, expected ~%f\n", result, meta_logit); failed++; }
+    }
+
+    printf("  test_sigmoid_gate: %d passed, %d failed\n", passed, failed);
+    return failed;
+}
+
+static int test_gate_range(void) {
+    int passed = 0, failed = 0;
+
+    /* Verify sigmoid output is always in [0, 1] for a range of inputs */
+    float test_inputs[] = {-100.0f, -10.0f, -1.0f, -0.001f, 0.0f, 0.001f, 1.0f, 10.0f, 100.0f};
+    int n_tests = (int)(sizeof(test_inputs) / sizeof(test_inputs[0]));
+
+    for (int i = 0; i < n_tests; i++) {
+        float g = sigmoid_gate(test_inputs[i]);
+        if (g >= 0.0f && g <= 1.0f) {
+            passed++;
+        } else {
+            printf("  FAIL: sigmoid(%f) = %f, out of [0,1]\n", test_inputs[i], g);
+            failed++;
+        }
+    }
+
+    /* Verify monotonicity: sigmoid(a) < sigmoid(b) when a < b */
+    for (int i = 0; i < n_tests - 1; i++) {
+        float ga = sigmoid_gate(test_inputs[i]);
+        float gb = sigmoid_gate(test_inputs[i + 1]);
+        if (ga <= gb) {
+            passed++;
+        } else {
+            printf("  FAIL: sigmoid(%f)=%f > sigmoid(%f)=%f, not monotonic\n",
+                   test_inputs[i], ga, test_inputs[i + 1], gb);
+            failed++;
+        }
+    }
+
+    printf("  test_gate_range: %d passed, %d failed\n", passed, failed);
+    return failed;
+}
+
+static int run_gate_tests(void) {
+    printf("\n[TEST] Sigmoid gate tests:\n");
+    int total_failures = 0;
+    total_failures += test_sigmoid_gate();
+    total_failures += test_gate_range();
+    if (total_failures == 0)
+        printf("  ALL GATE TESTS PASSED\n");
+    else
+        printf("  %d GATE TEST(S) FAILED\n", total_failures);
+    return total_failures;
+}
 int main(int argc, char **argv) {
     printf("============================================================\n");
     printf("  PostGPT (C) — metaweight BPE transformer\n");
     printf("  resonance is unbreakable\n");
+    printf("  sigmoid gate: learned_gate=%.4f, gate=%.4f\n", learned_gate, sigmoid_gate(learned_gate));
     printf("============================================================\n");
+
+    /* Run gate tests */
+    if (run_gate_tests() > 0) {
+        printf("FATAL: gate tests failed, aborting\n");
+        return 1;
+    }
 
     /* Load corpus */
     printf("\n[1] Loading corpus...\n");
