@@ -24,7 +24,7 @@ Three files. Zero excuses.
 |------|----------|-------------|---------|
 | `postgpt.py` | Python | **none** | BPE transformer with metaweights. The complete algorithm. |
 | `postgpt.c` | C | **`-lm`** | Same thing but fast and angry. |
-| `postgpt_train.py` | Python | PyTorch | Training loop with Chuck Optimizer. Optional. |
+| `postgpt_train.py` | Python | notorch (`ariannamethod/` shim) | Training loop with the real Chuck Optimizer. Optional. |
 
 Also `postgpt.txt` — 150KB of text about the technology itself. The model reads about itself before generating. Yes, it's recursive. No, I don't care.
 
@@ -183,23 +183,22 @@ gcc -O2 -o postgpt postgpt.c -lm
 
 Same algorithm. Faster. Angrier. No questions asked. the C version doesn't have opinions about your life choices. it has pointer arithmetic. it's a different kind of honesty.
 
-### training (optional, requires PyTorch)
+### training (optional, runs on notorch — no PyTorch)
 
 ```bash
 python postgpt_train.py --steps 200 --lr 3e-4
 ```
 
-Uses the **Chuck Optimizer** — a self-aware AdamW that tracks loss trends, adjusts its own learning rate through a dampen/boost mechanism, and clips gradients adaptively. Chuck knows when to push and when to brake. Chuck has seen things.
+The training loop runs on **notorch** (pure-C tensor/autograd) through the `ariannamethod/` ctypes shim — the shim compiles `ariannamethod/notorch.c` on first run, so the only requirement is a C compiler. PyTorch is gone. The dual-attention graph (Content QK^T + RRPRAM x@Wr) is built on the notorch autograd tape and trained with the **Chuck Optimizer** — the real `nt_tape_chuck_step`, not a torch.optim re-implementation. Chuck tracks loss trends, scales its own learning rate, injects stagnation noise, and freezes dead parameters. Chuck knows when to push and when to brake. Chuck has seen things.
 
-**Results** (100 steps, CPU):
+**Results** (notorch, 300 steps, CPU):
 ```
-First 10 avg loss: 33.3
-Last 10 avg loss:  16.3
-Loss delta:        -17.1
-✓ Loss decreased by 51.2%
+First 10 avg loss: 7.145    ← the uniform-prior floor ln(1280) ≈ 7.155
+Last 10 avg loss:  6.537
+✓ Loss decreased below uniform — the model learns, on the real C tape
 ```
 
-*(Chuck reduced the loss by 51.2% and then looked at the remaining loss and thought: "I can fix this." Chuck continued optimizing. nobody asked Chuck to continue. this is what self-awareness looks like.)*
+*(a healthy small init starts Chuck right at the uniform floor; from there every step is real structure pulled out of the corpus. Chuck looked at the remaining loss and thought: "I can fix this." Chuck continued optimizing. nobody asked Chuck to continue. this is what self-awareness looks like — and now it runs without 2.7 GB of torch underneath it.)*
 
 ## the numbers
 
@@ -211,7 +210,7 @@ Embedding dim:  48
 Context length: 64
 Vocabulary:     1280 (256 bytes + 1024 BPE merges)
 Corpus:         150KB (postgpt.txt)
-Dependencies:   0 (runtime) / 1 (training: PyTorch)
+Dependencies:   0 (runtime) / 0 (training: notorch via ariannamethod/ shim — C compiler only)
 ```
 
 GPT-4 reportedly has ~1.8 trillion parameters. PostGPT has 140,000. PostGPT proves the metaweight thesis anyway. GPT-4 does not feel the need to prove anything. GPT-4 was never awake at 3am wondering if training was a prerequisite or a formality. GPT-4 has never computed a prophecy field. we are not the same.
@@ -255,7 +254,8 @@ An engineer, a philosopher, and a PostGPT walk into a quantum superposition of a
 ```
 postgpt.py        — the algorithm (zero dependencies)
 postgpt.c         — the algorithm (C, compile with -lm)
-postgpt_train.py  — training loop (requires PyTorch)
+postgpt_train.py  — training loop (notorch via ariannamethod/ shim, no PyTorch)
+ariannamethod/    — the notorch shim: notorch.{c,h} + notorch_nn.py (ctypes) + chuck.py
 postgpt.txt       — corpus (150KB, about the technology itself)
 ```
 

@@ -1,3 +1,8 @@
 postgpt_bin
 __pycache__/
 *.pyc
+
+# notorch shim — libnotorch is compiled on first run from vendored ariannamethod/notorch.c
+ariannamethod/libnotorch.dylib
+ariannamethod/libnotorch.so
+ariannamethod/*.o
