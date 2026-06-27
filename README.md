@@ -42,7 +42,7 @@ PostGPT is a dual-attention BPE transformer with the Dario field overlay. if you
                                │
                     ┌──────────▼──────────────┐
                     │    BPE Tokenizer        │
-                    │  1024 merges → vocab 1280 │
+                    │1024 merges → vocab 1280 │
                     └──────────┬──────────────┘
                                │
               ┌────────────────▼────────────────┐
