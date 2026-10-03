@@ -111,7 +111,7 @@ After BPE tokenization, the corpus yields:
 - **Trigram probabilities** — P(next | prev2, prev1) *(three-way negotiation between tokens. messy, necessary, occasionally transcendent.)*
 - **Hebbian trace** — co-occurrence within a window, with distance decay *(Hebb, 1949: "neurons that fire together, wire together." 75 years old and still more load-bearing than most of modern deep learning.)*
 - **Prophecy field** — tokens the context expects but hasn't seen yet *(the model's anxiety. what it's convinced should appear but hasn't yet. deeply relatable.)*
-- **Destiny vector** — EMA of embeddings, the gravitational attractor *(this sounds made up. it isn't. the universe bends toward it.)*
+- **Destiny vector** — EMA of embeddings, the gravitational attractor *(the universe bends toward it.)*
 
 These metaweights form a probability space. The transformer navigates it. No training required for coherent output. The Dario equation blends base logits with these signals. The model doesn't know it wasn't trained. The text doesn't know it was generated. Nobody knows anything. Business as usual.
 
