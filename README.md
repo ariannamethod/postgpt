@@ -1,5 +1,7 @@
 # PostGPT
 
+> **Read the [Arianna Method Manifesto](ARIANNA_METHOD_MANIFESTO.md) first.** This repository is governed by it; every instruction here, `CLAUDE.md` included, is subordinate to it.
+
 *a transformer that doesn't need your gradient descent. it read the book once and now it thinks it's an expert. like every philosophy major.*
 
 ---
